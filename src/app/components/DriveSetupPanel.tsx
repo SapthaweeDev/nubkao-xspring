@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, ExternalLink, HardDrive, X, Loader2, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, AlertCircle, ExternalLink, HardDrive, X, Loader2, LogOut, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import { googleDriveService } from '../services/googleDrive';
 
 interface DriveSetupPanelProps {
@@ -9,15 +9,22 @@ interface DriveSetupPanelProps {
 
 export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelProps) {
   const [clientId, setClientId] = useState(googleDriveService.clientId);
+  const [appUrl, setAppUrl] = useState(googleDriveService.appUrl);
   const [isAuthenticated, setIsAuthenticated] = useState(googleDriveService.isAuthenticated);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [showGuide, setShowGuide] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     googleDriveService.loadConfig().then(() => {
       setClientId(googleDriveService.clientId);
+      const savedUrl = googleDriveService.appUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+      setAppUrl(savedUrl);
+      if (!googleDriveService.appUrl && savedUrl) {
+        googleDriveService.setAppUrl(savedUrl);
+      }
       setIsAuthenticated(googleDriveService.isAuthenticated);
       setLoadingConfig(false);
     });
@@ -40,6 +47,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
     setErrorMsg('');
     try {
       googleDriveService.setClientId(clientId.trim());
+      googleDriveService.setAppUrl(appUrl.trim());
       await googleDriveService.authenticate();
       setIsAuthenticated(true);
       setStatus('success');
@@ -47,6 +55,13 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
       setStatus('error');
       setErrorMsg(err.message || 'เชื่อมต่อไม่สำเร็จ');
     }
+  };
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(appUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleDisconnect = () => {
@@ -138,6 +153,31 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
           </div>
         ) : (
           <>
+            {/* App URL input */}
+            <div>
+              <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
+                App URL <span className="text-gray-400 font-normal">(Authorized JavaScript origins)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={appUrl}
+                  onChange={e => setAppUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyUrl}
+                  title="คัดลอก URL"
+                  className="px-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-gray-500"
+                >
+                  {copied ? <CheckCircle size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">เพิ่ม URL นี้ใน Google Cloud Console → Credentials → Authorized JavaScript origins</p>
+            </div>
+
             {/* Client ID input */}
             <div>
               <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
@@ -199,7 +239,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
                 { step: '2', text: 'สร้างโปรเจกต์ใหม่หรือเลือกโปรเจกต์ที่มีอยู่' },
                 { step: '3', text: 'ไปที่ APIs & Services → Enable APIs → เปิดใช้ Google Drive API' },
                 { step: '4', text: 'ไปที่ Credentials → สร้าง OAuth 2.0 Client ID (Web application)' },
-                { step: '5', text: 'เพิ่ม URL ของแอปนี้ใน Authorized JavaScript origins' },
+                { step: '5', text: `เพิ่ม URL "${appUrl || window?.location?.origin || ''}" ใน Authorized JavaScript origins` },
                 { step: '6', text: 'คัดลอก Client ID มากรอกในช่องด้านบน' },
               ].map(item => (
                 <div key={item.step} className="flex gap-3 pt-2">

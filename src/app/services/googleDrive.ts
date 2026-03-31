@@ -3,6 +3,7 @@
 
 const LEGACY_CONFIG_KEY = 'drive-config-v1';
 const DB_CONFIG_KEY = 'drive_client_id';
+const DB_APP_URL_KEY = 'drive_app_url';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 declare global {
@@ -29,6 +30,7 @@ export interface DriveConfigStored {
 
 class GoogleDriveService {
   private _clientId: string = '';
+  private _appUrl: string = '';
   private _accessToken: string = '';
   private _tokenExpiry: number = 0;
   private _tokenClient: any = null;
@@ -37,16 +39,15 @@ class GoogleDriveService {
 
   constructor() {}
 
-  /** Load clientId from DB (call this on app mount) */
+  /** Load clientId and appUrl from DB (call this on app mount) */
   async loadConfig(): Promise<void> {
     try {
       const res = await fetch('/api/config');
       if (res.ok) {
         const cfg: Record<string, string> = await res.json();
-        if (cfg[DB_CONFIG_KEY]) {
-          this._clientId = cfg[DB_CONFIG_KEY];
-          return;
-        }
+        if (cfg[DB_CONFIG_KEY]) this._clientId = cfg[DB_CONFIG_KEY];
+        if (cfg[DB_APP_URL_KEY]) this._appUrl = cfg[DB_APP_URL_KEY];
+        if (this._clientId) return;
       }
     } catch { /* ignore */ }
     // Migrate from localStorage if present
@@ -65,15 +66,23 @@ class GoogleDriveService {
 
   private async _saveConfig(): Promise<void> {
     try {
-      await fetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: DB_CONFIG_KEY, value: this._clientId }),
-      });
+      await Promise.all([
+        fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: DB_CONFIG_KEY, value: this._clientId }),
+        }),
+        fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: DB_APP_URL_KEY, value: this._appUrl }),
+        }),
+      ]);
     } catch { /* ignore */ }
   }
 
   get clientId(): string { return this._clientId; }
+  get appUrl(): string { return this._appUrl; }
   get isConfigured(): boolean { return !!this._clientId; }
   get isAuthenticated(): boolean {
     return !!this._accessToken && Date.now() < this._tokenExpiry;
@@ -82,6 +91,11 @@ class GoogleDriveService {
   setClientId(id: string) {
     this._clientId = id.trim();
     this._tokenClient = null;
+    this._saveConfig(); // fire-and-forget
+  }
+
+  setAppUrl(url: string) {
+    this._appUrl = url.trim();
     this._saveConfig(); // fire-and-forget
   }
 
@@ -96,6 +110,7 @@ class GoogleDriveService {
   clearConfig() {
     this.clearAuth();
     this._clientId = '';
+    this._appUrl = '';
     this._saveConfig(); // fire-and-forget, saves empty string
   }
 

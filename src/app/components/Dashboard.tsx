@@ -29,9 +29,10 @@ export function Dashboard() {
   const [sortBy, setSortBy] = useState<'steps' | 'missing' | 'name'>('steps');
   const [driveConnected, setDriveConnected] = useState(googleDriveService.isAuthenticated);
 
-  const [isAdmin, setIsAdmin] = useState(() =>
-    typeof window !== 'undefined' && sessionStorage.getItem('isAdmin') === 'true'
-  );
+  const [isAdmin, setIsAdmin] = useState(false);
+  React.useEffect(() => {
+    if (sessionStorage.getItem('isAdmin') === 'true') setIsAdmin(true);
+  }, []);
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
