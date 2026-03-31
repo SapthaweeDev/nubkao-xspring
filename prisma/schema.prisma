@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+datasource db {
+  provider = "mysql"
+}
+
+model Member {
+  id        String      @id @default(cuid())
+  name      String
+  color     String
+  bgColor   String
+  createdAt DateTime    @default(now())
+  entries   StepEntry[]
+}
+
+model StepEntry {
+  id               String   @id @default(cuid())
+  memberId         String
+  date             String
+  steps            Int
+  proofDriveFileId String?
+  proofDriveUrl    String?
+  hasLocalProof    Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, date])
+}
+
+model Config {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}

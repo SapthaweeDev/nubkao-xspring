@@ -17,6 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN npx prisma generate
 RUN pnpm build
 
 # ─── Stage 3: runner ──────────────────────────────────────────────────────────

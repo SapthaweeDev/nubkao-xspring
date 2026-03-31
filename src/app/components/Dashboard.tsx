@@ -29,6 +29,42 @@ export function Dashboard() {
   const [sortBy, setSortBy] = useState<'steps' | 'missing' | 'name'>('steps');
   const [driveConnected, setDriveConnected] = useState(googleDriveService.isAuthenticated);
 
+  const [isAdmin, setIsAdmin] = useState(() =>
+    typeof window !== 'undefined' && sessionStorage.getItem('isAdmin') === 'true'
+  );
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const logoClickCount = React.useRef(0);
+  const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const handleLogoClick = () => {
+    if (isAdmin) return;
+    logoClickCount.current += 1;
+    if (logoClickCount.current >= 5) {
+      logoClickCount.current = 0;
+      clearTimeout(logoClickTimer.current);
+      setShowPinDialog(true);
+    } else {
+      clearTimeout(logoClickTimer.current);
+      logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 2000);
+    }
+  };
+
+  const handlePinSubmit = () => {
+    const adminPin = process.env.NEXT_PUBLIC_ADMIN_PIN || '1234';
+    if (pinInput === adminPin) {
+      setIsAdmin(true);
+      sessionStorage.setItem('isAdmin', 'true');
+      setShowPinDialog(false);
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  };
+
   // Refresh Drive status
   React.useEffect(() => {
     const tick = setInterval(() => setDriveConnected(googleDriveService.isAuthenticated), 2000);
@@ -94,7 +130,7 @@ export function Dashboard() {
           {/* Top bar */}
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl">🚶</div>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl cursor-pointer select-none" onClick={handleLogoClick}>🚶</div>
               <div>
                 <h1 className="text-white" style={{ fontWeight: 700, fontSize: '1.25rem' }}>Nubkao(ช้ากว่าเต่า ก็พวกเรานี่แหละ)</h1>
                 <p className="text-indigo-200 text-xs">{formatDateDisplay(startDate)} — {formatDateDisplay(today)}</p>
@@ -116,13 +152,15 @@ export function Dashboard() {
                 <span>นำเข้า Excel</span>
               </button>
 
-              <button
-                onClick={() => { setTempStartDate(startDate); setShowSettings(!showSettings); }}
-                className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-sm px-3 py-2 rounded-xl transition-colors"
-              >
-                <Settings size={15} />
-                <span>ตั้งค่า</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => { setTempStartDate(startDate); setShowSettings(!showSettings); }}
+                  className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-sm px-3 py-2 rounded-xl transition-colors"
+                >
+                  <Settings size={15} />
+                  <span>ตั้งค่า</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setModal({ isOpen: true })}
@@ -379,6 +417,43 @@ export function Dashboard() {
         onClose={() => setModal({ isOpen: false })}
       />
       <ExcelImportModal isOpen={showExcel} onClose={() => setShowExcel(false)} />
+
+      {/* Admin PIN Dialog */}
+      {showPinDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80">
+            <h2 className="text-gray-800 text-lg mb-1" style={{ fontWeight: 700 }}>🔐 Admin</h2>
+            <p className="text-gray-500 text-sm mb-4">กรอก PIN เพื่อเข้าสู่โหมดผู้ดูแล</p>
+            <input
+              type="password"
+              inputMode="numeric"
+              placeholder="PIN"
+              value={pinInput}
+              onChange={e => { setPinInput(e.target.value); setPinError(false); }}
+              onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+              autoFocus
+              className={`w-full border rounded-xl px-4 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2 mb-1 ${pinError ? 'border-rose-400 focus:ring-rose-300' : 'border-gray-200 focus:ring-indigo-300'}`}
+            />
+            {pinError && <p className="text-rose-500 text-xs text-center mb-3">PIN ไม่ถูกต้อง</p>}
+            {!pinError && <div className="mb-3" />}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowPinDialog(false); setPinInput(''); setPinError(false); }}
+                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handlePinSubmit}
+                className="flex-1 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm hover:bg-indigo-700 transition-colors"
+                style={{ fontWeight: 600 }}
+              >
+                เข้าสู่ระบบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

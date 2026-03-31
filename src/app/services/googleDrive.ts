@@ -1,7 +1,8 @@
 // Google Drive client service
 // Handles GIS OAuth2 auth in the browser; delegates all Drive API calls to Next.js API routes.
 
-const CONFIG_KEY = 'drive-config-v1';
+const LEGACY_CONFIG_KEY = 'drive-config-v1';
+const DB_CONFIG_KEY = 'drive_client_id';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 declare global {
@@ -34,22 +35,42 @@ class GoogleDriveService {
   private _gisLoaded: boolean = false;
   private _loadPromise: Promise<void> | null = null;
 
-  constructor() {
-    this._loadConfig();
-  }
+  constructor() {}
 
-  private _loadConfig() {
+  /** Load clientId from DB (call this on app mount) */
+  async loadConfig(): Promise<void> {
     try {
-      const raw = localStorage.getItem(CONFIG_KEY);
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const cfg: Record<string, string> = await res.json();
+        if (cfg[DB_CONFIG_KEY]) {
+          this._clientId = cfg[DB_CONFIG_KEY];
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+    // Migrate from localStorage if present
+    try {
+      const raw = localStorage.getItem(LEGACY_CONFIG_KEY);
       if (raw) {
         const cfg: DriveConfigStored = JSON.parse(raw);
-        this._clientId = cfg.clientId || '';
+        if (cfg.clientId) {
+          this._clientId = cfg.clientId;
+          await this._saveConfig();
+          localStorage.removeItem(LEGACY_CONFIG_KEY);
+        }
       }
     } catch { /* ignore */ }
   }
 
-  private _saveConfig() {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({ clientId: this._clientId }));
+  private async _saveConfig(): Promise<void> {
+    try {
+      await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: DB_CONFIG_KEY, value: this._clientId }),
+      });
+    } catch { /* ignore */ }
   }
 
   get clientId(): string { return this._clientId; }
@@ -61,7 +82,7 @@ class GoogleDriveService {
   setClientId(id: string) {
     this._clientId = id.trim();
     this._tokenClient = null;
-    this._saveConfig();
+    this._saveConfig(); // fire-and-forget
   }
 
   clearAuth() {
@@ -75,7 +96,7 @@ class GoogleDriveService {
   clearConfig() {
     this.clearAuth();
     this._clientId = '';
-    localStorage.removeItem(CONFIG_KEY);
+    this._saveConfig(); // fire-and-forget, saves empty string
   }
 
   /** Dynamically load the Google Identity Services script */

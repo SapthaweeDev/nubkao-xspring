@@ -13,13 +13,23 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
   const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [showGuide, setShowGuide] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(true);
 
   useEffect(() => {
+    googleDriveService.loadConfig().then(() => {
+      setClientId(googleDriveService.clientId);
+      setIsAuthenticated(googleDriveService.isAuthenticated);
+      setLoadingConfig(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (loadingConfig) return;
     const tick = setInterval(() => {
       setIsAuthenticated(googleDriveService.isAuthenticated);
     }, 2000);
     return () => clearInterval(tick);
-  }, []);
+  }, [loadingConfig]);
 
   const handleSaveAndConnect = async () => {
     if (!clientId.trim()) {
@@ -53,6 +63,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
   };
 
   if (compact) {
+    if (loadingConfig) return <div className="text-xs text-gray-400">กำลังโหลด...</div>;
     return (
       <div className="flex items-center gap-3">
         <div className={`w-2.5 h-2.5 rounded-full ${isAuthenticated ? 'bg-emerald-400' : 'bg-gray-300'}`} />

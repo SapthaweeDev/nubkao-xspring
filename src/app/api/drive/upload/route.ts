@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
-const FOLDER_NAME = 'Step Tracker Proofs';
+const FOLDER_NAME = 'nubkao_xspring';
 
 async function ensureFolder(accessToken: string): Promise<string> {
   const headers = { Authorization: `Bearer ${accessToken}` };
