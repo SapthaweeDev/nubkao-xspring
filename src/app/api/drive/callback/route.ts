@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+function getOriginFromHeaders(req: NextRequest): string {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const proto = req.headers.get('x-forwarded-proto') || req.nextUrl.protocol.replace(':', '');
+  if (host && !host.startsWith('0.0.0.0')) return `${proto}://${host}`;
+  return req.nextUrl.origin;
+}
+
+async function getOrigin(req: NextRequest): Promise<string> {
+  const saved = await prisma.config.findUnique({ where: { key: 'app_url' } });
+  if (saved?.value) return saved.value;
+  return getOriginFromHeaders(req);
+}
+
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
   const error = req.nextUrl.searchParams.get('error');
-  const origin = req.nextUrl.origin;
+  const origin = await getOrigin(req);
 
   if (error || !code) {
     return NextResponse.redirect(`${origin}/?drive_error=${encodeURIComponent(error || 'no_code')}`);
@@ -17,7 +30,6 @@ export async function GET(req: NextRequest) {
   rows.forEach(r => { map[r.key] = r.value; });
 
   const redirectUri = `${origin}/api/drive/callback`;
-
   try {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',

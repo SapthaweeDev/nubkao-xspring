@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+async function getOrigin(req: NextRequest): Promise<string> {
+  const saved = await prisma.config.findUnique({ where: { key: 'app_url' } });
+  if (saved?.value) return saved.value;
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const proto = req.headers.get('x-forwarded-proto') || req.nextUrl.protocol.replace(':', '');
+  if (host && !host.startsWith('0.0.0.0')) return `${proto}://${host}`;
+  return req.nextUrl.origin;
+}
+
 export async function GET(req: NextRequest) {
   const rows = await prisma.config.findMany({
     where: { key: { in: ['drive_client_id', 'drive_client_secret'] } },
@@ -12,7 +21,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'กรุณาบันทึก Client ID และ Client Secret ก่อน' }, { status: 400 });
   }
 
-  const redirectUri = `${req.nextUrl.origin}/api/drive/callback`;
+  const origin = await getOrigin(req);
+  const redirectUri = `${origin}/api/drive/callback`;
 
   const params = new URLSearchParams({
     client_id: map.drive_client_id,

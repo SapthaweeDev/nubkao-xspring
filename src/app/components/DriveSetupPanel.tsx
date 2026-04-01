@@ -53,7 +53,7 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
       const res = await fetch('/api/drive/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), folderId }),
+        body: JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), folderId, appUrl: window.location.origin }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'บันทึกล้มเหลว');
       // Redirect to Google OAuth

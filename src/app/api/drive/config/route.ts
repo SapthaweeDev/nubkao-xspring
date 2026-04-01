@@ -6,12 +6,12 @@ const DRIVE_KEYS = ['drive_client_id', 'drive_client_secret', 'drive_folder_id',
 // Save drive credentials to DB
 export async function PUT(req: NextRequest) {
   try {
-    const { clientId, clientSecret, folderId } = await req.json();
+    const { clientId, clientSecret, folderId, appUrl } = await req.json();
     if (!clientId || !clientSecret || !folderId) {
       return NextResponse.json({ error: 'Missing clientId, clientSecret or folderId' }, { status: 400 });
     }
 
-    await Promise.all([
+    const upserts: Promise<unknown>[] = [
       prisma.config.upsert({
         where: { key: 'drive_client_id' },
         update: { value: clientId },
@@ -27,7 +27,19 @@ export async function PUT(req: NextRequest) {
         update: { value: folderId },
         create: { key: 'drive_folder_id', value: folderId },
       }),
-    ]);
+    ];
+
+    if (appUrl) {
+      upserts.push(
+        prisma.config.upsert({
+          where: { key: 'app_url' },
+          update: { value: appUrl },
+          create: { key: 'app_url', value: appUrl },
+        })
+      );
+    }
+
+    await Promise.all(upserts);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
