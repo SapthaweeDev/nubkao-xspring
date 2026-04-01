@@ -5,6 +5,9 @@ import { Providers } from "./components/Providers";
 import { prisma } from "@/lib/prisma";
 import type { TeamMember, StepEntry } from "./types";
 
+// Prevent static prerendering – all pages require live DB access at request time
+export const dynamic = 'force-dynamic';
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
