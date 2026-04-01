@@ -24,9 +24,13 @@ function makeJwt(email: string, privateKey: string): string {
     iat: now,
   })));
   const signingInput = `${header}.${payload}`;
-  const sign = crypto.createSign('RSA-SHA256');
-  sign.update(signingInput);
-  const sig = base64url(sign.sign(privateKey));
+  const sig = base64url(
+    crypto.sign('sha256', Buffer.from(signingInput), {
+      key: privateKey,
+      format: 'pem',
+      type: 'pkcs8',
+    })
+  );
   return `${signingInput}.${sig}`;
 }
 
