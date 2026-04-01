@@ -173,6 +173,41 @@ class GoogleDriveService {
     });
   }
 
+  /**
+   * Silent auth attempt at app startup.
+   * Uses prompt:'' so Google auto-grants if the user already approved recently.
+   * Never throws — silently stays disconnected if interaction is required.
+   */
+  async initSilent(): Promise<void> {
+    try {
+      if (!this._clientId) return;
+      await this._ensureTokenClient();
+      if (this.isAuthenticated) return;
+      await new Promise<void>((resolve) => {
+        this._tokenClient.callback = (resp: any) => {
+          if (!resp.error) {
+            this._accessToken = resp.access_token;
+            this._tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+          }
+          resolve(); // always resolve — failure is OK
+        };
+        // prompt:'' = silent if user already granted, otherwise skipped
+        this._tokenClient.requestAccessToken({ prompt: '' });
+      });
+    } catch {
+      // silent fail
+    }
+  }
+
+  /**
+   * Load config from DB then attempt silent auth.
+   * Call once on app mount.
+   */
+  async init(): Promise<void> {
+    await this.loadConfig();
+    await this.initSilent();
+  }
+
   private async _token(): Promise<string> {
     if (!this.isAuthenticated) await this.authenticate();
     return this._accessToken;

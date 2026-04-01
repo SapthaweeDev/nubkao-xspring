@@ -446,7 +446,6 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleFileInput}
               className="hidden"
             />
