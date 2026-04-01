@@ -33,14 +33,6 @@ function makeJwt(email: string, rawPrivateKey: string): string {
 }
 
 async function getCredentials(): Promise<{ email: string; privateKey: string } | null> {
-  // 1. Try env vars first (short keys / Docker / local dev)
-  const envEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const envKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
-  if (envEmail && envKey) {
-    return { email: envEmail, privateKey: envKey.replace(/\\n/g, '\n') };
-  }
-
-  // 2. Fall back to DB (handles Plesk 255-char env var limit)
   try {
     const rows = await prisma.config.findMany({
       where: { key: { in: [SA_EMAIL_KEY, SA_KEY_KEY] } },
@@ -48,10 +40,9 @@ async function getCredentials(): Promise<{ email: string; privateKey: string } |
     const map: Record<string, string> = {};
     rows.forEach(r => { map[r.key] = r.value; });
     if (map[SA_EMAIL_KEY] && map[SA_KEY_KEY]) {
-      return { email: map[SA_EMAIL_KEY], privateKey: map[SA_KEY_KEY].replace(/\\n/g, '\n') };
+      return { email: map[SA_EMAIL_KEY], privateKey: map[SA_KEY_KEY] };
     }
   } catch { /* ignore */ }
-
   return null;
 }
 
@@ -84,13 +75,6 @@ export async function getServiceAccountToken(): Promise<string> {
 }
 
 export async function isServiceAccountConfigured(): Promise<boolean> {
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
-    // env-based still needs folder ID in DB
-    try {
-      const row = await prisma.config.findUnique({ where: { key: 'sa_folder_id' } });
-      return !!row?.value;
-    } catch { return false; }
-  }
   try {
     const rows = await prisma.config.findMany({
       where: { key: { in: [SA_EMAIL_KEY, SA_KEY_KEY, 'sa_folder_id'] } },
