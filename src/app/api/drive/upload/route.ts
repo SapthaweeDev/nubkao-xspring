@@ -1,34 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceAccountToken } from '@/lib/googleServiceAccount';
+import { prisma } from '@/lib/prisma';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
-const FOLDER_NAME = 'nubkao_xspring';
-
-async function ensureFolder(accessToken: string): Promise<string> {
-  const headers = { Authorization: `Bearer ${accessToken}` };
-  const q = `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-
-  const searchRes = await fetch(
-    `${DRIVE_REST}/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
-    { headers }
-  );
-  if (!searchRes.ok) throw new Error('ค้นหาโฟลเดอร์ Drive ล้มเหลว');
-  const searchData = await searchRes.json();
-
-  if (searchData.files?.length > 0) {
-    return searchData.files[0].id as string;
-  }
-
-  const createRes = await fetch(`${DRIVE_REST}/files`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
-  });
-  if (!createRes.ok) throw new Error('สร้างโฟลเดอร์ Drive ล้มเหลว');
-  const folder = await createRes.json();
-  return folder.id as string;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +13,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Get shared folder ID from DB
+    const folderConfig = await prisma.config.findUnique({ where: { key: 'sa_folder_id' } });
+    if (!folderConfig?.value) {
+      return NextResponse.json({ error: 'ยังไม่ได้ตั้งค่า Folder ID กรุณาตั้งค่าใน Settings' }, { status: 400 });
+    }
+    const folderId = folderConfig.value;
+
     const accessToken = await getServiceAccountToken();
 
     const [header, base64Data] = dataUrl.split(',');
@@ -45,8 +27,6 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(base64Data, 'base64');
     const ext = mimeType.split('/')[1] ?? 'jpg';
     const filename = `proof_${memberName}_${date}.${ext}`;
-
-    const folderId = await ensureFolder(accessToken);
 
     const metaBlob = new Blob(
       [JSON.stringify({

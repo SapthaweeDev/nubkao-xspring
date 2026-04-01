@@ -85,13 +85,17 @@ export async function getServiceAccountToken(): Promise<string> {
 
 export async function isServiceAccountConfigured(): Promise<boolean> {
   if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
-    return true;
+    // env-based still needs folder ID in DB
+    try {
+      const row = await prisma.config.findUnique({ where: { key: 'sa_folder_id' } });
+      return !!row?.value;
+    } catch { return false; }
   }
   try {
     const rows = await prisma.config.findMany({
-      where: { key: { in: [SA_EMAIL_KEY, SA_KEY_KEY] } },
+      where: { key: { in: [SA_EMAIL_KEY, SA_KEY_KEY, 'sa_folder_id'] } },
     });
-    return rows.length === 2;
+    return rows.length === 3;
   } catch {
     return false;
   }

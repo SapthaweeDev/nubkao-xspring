@@ -12,6 +12,7 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
+  const [folderUrl, setFolderUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -37,15 +38,25 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
       setSaveError('ไม่พบ client_email หรือ private_key ใน JSON');
       return;
     }
+
+    // Extract folder ID from URL or use raw ID
+    const folderMatch = folderUrl.trim().match(/folders\/([a-zA-Z0-9_-]+)/);
+    const folderId = folderMatch ? folderMatch[1] : folderUrl.trim();
+    if (!folderId) {
+      setSaveError('กรุณากรอก URL หรือ ID ของโฟลเดอร์ Google Drive');
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch('/api/drive/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: parsed.client_email, privateKey: parsed.private_key }),
+        body: JSON.stringify({ email: parsed.client_email, privateKey: parsed.private_key, folderId }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'บันทึกล้มเหลว');
       setJsonInput('');
+      setFolderUrl('');
       setLoadingConfig(true);
       checkStatus();
     } catch (err: any) {
@@ -145,6 +156,16 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
                   rows={6}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
                 />
+                <label className="block text-xs text-gray-600 font-semibold mt-2">
+                  Google Drive Folder URL <span className="text-gray-400 font-normal">(ที่ share ให้ Service Account แล้ว)</span>
+                </label>
+                <input
+                  type="text"
+                  value={folderUrl}
+                  onChange={e => { setFolderUrl(e.target.value); setSaveError(''); }}
+                  placeholder="https://drive.google.com/drive/folders/xxxxxxxxxxxxxxxx"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
                 {saveError && (
                   <p className="text-xs text-red-500 flex items-center gap-1">
                     <AlertCircle size={12} /> {saveError}
@@ -180,9 +201,9 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
                 { step: '2', text: 'สร้างโปรเจกต์ → ไปที่ APIs & Services → Enable Google Drive API' },
                 { step: '3', text: 'ไปที่ IAM & Admin → Service Accounts → สร้าง Service Account ใหม่' },
                 { step: '4', text: 'สร้าง Key (JSON) สำหรับ Service Account แล้วดาวน์โหลด' },
-                { step: '5', text: 'ตั้งค่า GOOGLE_SERVICE_ACCOUNT_EMAIL = client_email จาก JSON' },
-                { step: '6', text: 'ตั้งค่า GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = private_key จาก JSON (ใส่ทั้งหมดรวม \\n)' },
-                { step: '7', text: 'แชร์โฟลเดอร์ Google Drive ที่ต้องการให้ Service Account email มี Editor permission' },
+                { step: '5', text: 'เปิด Google Drive ส่วนตัว → สร้างโฟลเดอร์ใหม่ → คลิกขวา → Share → ใส่ client_email ของ Service Account → Editor' },
+                { step: '6', text: 'คัดลอก URL ของโฟลเดอร์จาก Browser เช่น https://drive.google.com/drive/folders/xxxxxxxx' },
+                { step: '7', text: 'วาง JSON และ Folder URL ในช่องด้านบนแล้วกด บันทึก' },
               ].map(item => (
                 <div key={item.step} className="flex gap-3 pt-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center shrink-0" style={{ fontWeight: 700 }}>
