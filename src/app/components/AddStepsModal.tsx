@@ -117,39 +117,46 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Read File as dataURL (handles FileReader async race)
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = () => reject(new Error('อ่านไฟล์ภาพล้มเหลว'));
+      reader.readAsDataURL(file);
+    });
+
   // ── Save proof (local + Drive) ───────────────────────────────────────────────
-  const saveProof = async (memberId: string, date: string): Promise<{ hasLocalProof: boolean; driveFileId?: string; driveUrl?: string }> => {
-    if (!proofDataUrl) return { hasLocalProof: false };
+  const saveProof = async (memberId: string, date: string, file?: File | null): Promise<{ hasLocalProof: boolean; driveFileId?: string; driveUrl?: string }> => {
+    // Ensure we have a dataUrl — read from File if state not yet hydrated
+    let dataUrl = proofDataUrl;
+    if (!dataUrl && file) dataUrl = await readFileAsDataUrl(file);
+    if (!dataUrl) return { hasLocalProof: false };
 
     // Resize for storage
-    const resized = await imageStorage.resizeImage(proofDataUrl);
+    const resized = await imageStorage.resizeImage(dataUrl);
 
     // Save locally (IndexedDB)
     const localKey = imageStorage.proofKey(memberId, date);
     await imageStorage.saveImage(localKey, resized);
 
-    // Upload to Google Drive if configured
-    if (googleDriveService.isConfigured) {
-      setUploadState('uploading');
-      try {
-        const member = members.find(m => m.id === memberId);
-        const result = await googleDriveService.uploadImage(
-          memberId,
-          member?.name || memberId,
-          date,
-          resized
-        );
-        setDriveUrl(result.webViewUrl);
-        setUploadState('success');
-        return { hasLocalProof: true, driveFileId: result.fileId, driveUrl: result.webViewUrl };
-      } catch (err: any) {
-        setUploadState('error');
-        setUploadError(`Drive: ${err.message}`);
-        return { hasLocalProof: true }; // saved locally even if Drive failed
-      }
+    // Always attempt Drive upload — server decides if configured
+    setUploadState('uploading');
+    try {
+      const member = members.find(m => m.id === memberId);
+      const result = await googleDriveService.uploadImage(
+        memberId,
+        member?.name || memberId,
+        date,
+        resized
+      );
+      setDriveUrl(result.webViewUrl);
+      setUploadState('success');
+      return { hasLocalProof: true, driveFileId: result.fileId, driveUrl: result.webViewUrl };
+    } catch (err: any) {
+      setUploadState('idle'); // Drive not configured or failed — silent, local proof still saved
+      return { hasLocalProof: true };
     }
-
-    return { hasLocalProof: true };
   };
 
   // ── Form submit ──────────────────────────────────────────────────────────────
@@ -168,29 +175,34 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
 
     // Save proof if new image selected, or if existing local proof not yet on Drive
     let proof: { hasLocalProof?: boolean; proofDriveFileId?: string; proofDriveUrl?: string } = {};
-    if (proofFile) {
-      // New image selected → save locally + upload to Drive if connected
-      const result = await saveProof(selectedMemberId, selectedDate);
-      proof = {
-        hasLocalProof: result.hasLocalProof,
-        proofDriveFileId: result.driveFileId,
-        proofDriveUrl: result.driveUrl,
-      };
-    } else if (proofDataUrl && !existingEntry?.proofDriveUrl) {
-      // Existing local proof not yet on Drive → auto-upload via service account
-      const result = await saveProof(selectedMemberId, selectedDate);
-      proof = {
-        hasLocalProof: result.hasLocalProof ?? existingEntry?.hasLocalProof,
-        proofDriveFileId: result.driveFileId ?? existingEntry?.proofDriveFileId,
-        proofDriveUrl: result.driveUrl ?? existingEntry?.proofDriveUrl,
-      };
-    } else if (existingEntry) {
-      // Keep existing proof data
-      proof = {
-        hasLocalProof: existingEntry.hasLocalProof,
-        proofDriveFileId: existingEntry.proofDriveFileId,
-        proofDriveUrl: existingEntry.proofDriveUrl,
-      };
+    try {
+      if (proofFile) {
+        // New image selected → save locally + upload to Drive
+        const result = await saveProof(selectedMemberId, selectedDate, proofFile);
+        proof = {
+          hasLocalProof: result.hasLocalProof,
+          proofDriveFileId: result.driveFileId,
+          proofDriveUrl: result.driveUrl,
+        };
+      } else if (proofDataUrl && !existingEntry?.proofDriveUrl) {
+        // Existing local proof not yet on Drive → auto-upload
+        const result = await saveProof(selectedMemberId, selectedDate);
+        proof = {
+          hasLocalProof: result.hasLocalProof ?? existingEntry?.hasLocalProof,
+          proofDriveFileId: result.driveFileId ?? existingEntry?.proofDriveFileId,
+          proofDriveUrl: result.driveUrl ?? existingEntry?.proofDriveUrl,
+        };
+      } else if (existingEntry) {
+        // Keep existing proof data
+        proof = {
+          hasLocalProof: existingEntry.hasLocalProof,
+          proofDriveFileId: existingEntry.proofDriveFileId,
+          proofDriveUrl: existingEntry.proofDriveUrl,
+        };
+      }
+    } catch (err: any) {
+      setError(`บันทึกรูปล้มเหลว: ${err.message}`);
+      return;
     }
 
     try {
