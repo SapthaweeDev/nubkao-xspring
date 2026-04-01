@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     form.append('file', new Blob([buffer], { type: mimeType }), filename);
 
     const uploadRes = await fetch(
-      `${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,webViewLink`,
+      `${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true`,
       { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form }
     );
 
@@ -57,13 +57,17 @@ export async function POST(req: NextRequest) {
     const file = await uploadRes.json();
 
     // Make publicly viewable by anyone with link (non-critical)
-    await fetch(`${DRIVE_REST}/files/${file.id}/permissions`, {
+    await fetch(`${DRIVE_REST}/files/${file.id}/permissions?supportsAllDrives=true`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'reader', type: 'anyone' }),
     }).catch(() => {});
 
-    return NextResponse.json({ fileId: file.id, webViewUrl: file.webViewLink });
+    // Ensure webViewLink — fall back to constructing it if Drive omits it
+    const webViewUrl = file.webViewLink ||
+      `https://drive.google.com/file/d/${file.id}/view`;
+
+    return NextResponse.json({ fileId: file.id, webViewUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     return NextResponse.json({ error: message }, { status: 500 });

@@ -13,7 +13,7 @@ export async function DELETE(req: NextRequest) {
 
     const accessToken = await getServiceAccountToken();
 
-    const res = await fetch(`${DRIVE_REST}/files/${fileId}`, {
+    const res = await fetch(`${DRIVE_REST}/files/${fileId}?supportsAllDrives=true`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
