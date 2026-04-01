@@ -51,21 +51,10 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
       if (existingEntry.proofDriveUrl) setDriveUrl(existingEntry.proofDriveUrl);
 
       const fetchFromDrive = (fileId: string) => {
-        setIsFetchingFromDrive(true);
-        fetch(`/api/drive/image?fileId=${fileId}`)
-          .then(r => r.ok ? r.blob() : Promise.reject())
-          .then(blob => new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = e => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          }))
-          .then(dataUrl => {
-            setProofDataUrl(dataUrl);
-            setUploadState('success');
-          })
-          .catch(() => {})
-          .finally(() => setIsFetchingFromDrive(false));
+        // Files are public-readable — use thumbnail URL directly (no proxy needed)
+        const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+        setProofDataUrl(thumbnailUrl);
+        setUploadState('success');
       };
 
       if (existingEntry.hasLocalProof) {
