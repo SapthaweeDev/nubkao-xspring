@@ -53,8 +53,42 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
           selectedDate || initDate || ''
         );
         imageStorage.getImage(key).then((url: string | null) => {
-          if (url) setProofDataUrl(url);
+          if (url) {
+            setProofDataUrl(url);
+          } else if (existingEntry.proofDriveFileId) {
+            // Local cache missing — fetch from Drive
+            setUploadState('uploading');
+            fetch(`/api/drive/image?fileId=${existingEntry.proofDriveFileId}`)
+              .then(r => r.ok ? r.blob() : Promise.reject())
+              .then(blob => new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target?.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              }))
+              .then(dataUrl => {
+                setProofDataUrl(dataUrl);
+                setUploadState('success');
+              })
+              .catch(() => setUploadState('idle'));
+          }
         });
+      } else if (existingEntry.proofDriveFileId) {
+        // No local proof at all — fetch from Drive
+        setUploadState('uploading');
+        fetch(`/api/drive/image?fileId=${existingEntry.proofDriveFileId}`)
+          .then(r => r.ok ? r.blob() : Promise.reject())
+          .then(blob => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target?.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          }))
+          .then(dataUrl => {
+            setProofDataUrl(dataUrl);
+            setUploadState('success');
+          })
+          .catch(() => setUploadState('idle'));
       }
     }
   }, [existingEntry, isOpen]);
@@ -177,7 +211,10 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     let proof: { hasLocalProof?: boolean; proofDriveFileId?: string; proofDriveUrl?: string } = {};
     try {
       if (proofFile) {
-        // New image selected → save locally + upload to Drive
+        // New image selected → delete old Drive file if exists, then save new
+        if (existingEntry?.proofDriveFileId) {
+          googleDriveService.deleteFile(existingEntry.proofDriveFileId).catch(() => {});
+        }
         const result = await saveProof(selectedMemberId, selectedDate, proofFile);
         proof = {
           hasLocalProof: result.hasLocalProof,
