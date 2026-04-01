@@ -176,8 +176,8 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
         proofDriveFileId: result.driveFileId,
         proofDriveUrl: result.driveUrl,
       };
-    } else if (proofDataUrl && googleDriveService.isConfigured && !existingEntry?.proofDriveUrl) {
-      // Existing local proof not yet on Drive, Drive is now connected → auto-upload
+    } else if (proofDataUrl && !existingEntry?.proofDriveUrl) {
+      // Existing local proof not yet on Drive → auto-upload via service account
       const result = await saveProof(selectedMemberId, selectedDate);
       proof = {
         hasLocalProof: result.hasLocalProof ?? existingEntry?.hasLocalProof,

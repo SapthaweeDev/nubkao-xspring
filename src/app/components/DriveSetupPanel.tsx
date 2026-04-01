@@ -1,85 +1,64 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, ExternalLink, HardDrive, X, Loader2, LogOut, ChevronDown, ChevronUp, Copy } from 'lucide-react';
-import { googleDriveService } from '../services/googleDrive';
+import { CheckCircle, AlertCircle, ExternalLink, HardDrive, X, ChevronDown, ChevronUp, Loader2, Trash2 } from 'lucide-react';
 
 interface DriveSetupPanelProps {
   onClose?: () => void;
   compact?: boolean;
+  isAdmin?: boolean;
 }
 
-export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelProps) {
-  const [clientId, setClientId] = useState(googleDriveService.clientId);
-  const [appUrl, setAppUrl] = useState(googleDriveService.appUrl);
-  const [isConfigured, setIsConfigured] = useState(googleDriveService.isConfigured);
-  const [isAuthenticated, setIsAuthenticated] = useState(googleDriveService.isAuthenticated);
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [showGuide, setShowGuide] = useState(false);
+export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: DriveSetupPanelProps) {
+  const [isConfigured, setIsConfigured] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [jsonInput, setJsonInput] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  useEffect(() => {
-    googleDriveService.loadConfig().then(() => {
-      setClientId(googleDriveService.clientId);
-      const savedUrl = googleDriveService.appUrl || (typeof window !== 'undefined' ? window.location.origin : '');
-      setAppUrl(savedUrl);
-      if (!googleDriveService.appUrl && savedUrl) {
-        googleDriveService.setAppUrl(savedUrl);
-      }
-      setIsConfigured(googleDriveService.isConfigured);
-      setIsAuthenticated(googleDriveService.isAuthenticated);
-      setLoadingConfig(false);
-    });
-  }, []);
+  const checkStatus = () => {
+    fetch('/api/drive/status')
+      .then(r => r.json())
+      .then(d => { setIsConfigured(!!d.configured); setLoadingConfig(false); })
+      .catch(() => setLoadingConfig(false));
+  };
 
-  useEffect(() => {
-    if (loadingConfig) return;
-    const tick = setInterval(() => {
-      setIsConfigured(googleDriveService.isConfigured);
-      setIsAuthenticated(googleDriveService.isAuthenticated);
-    }, 2000);
-    return () => clearInterval(tick);
-  }, [loadingConfig]);
+  useEffect(() => { checkStatus(); }, []);
 
-  const handleSaveAndConnect = async () => {
-    if (!clientId.trim()) {
-      setErrorMsg('กรุณากรอก Client ID');
+  const handleSave = async () => {
+    setSaveError('');
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonInput.trim());
+    } catch {
+      setSaveError('JSON ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง');
       return;
     }
-    setStatus('connecting');
-    setErrorMsg('');
+    if (!parsed.client_email || !parsed.private_key) {
+      setSaveError('ไม่พบ client_email หรือ private_key ใน JSON');
+      return;
+    }
+    setSaving(true);
     try {
-      googleDriveService.setClientId(clientId.trim());
-      googleDriveService.setAppUrl(appUrl.trim());
-      await googleDriveService.authenticate();
-      setIsConfigured(true);
-      setIsAuthenticated(true);
-      setStatus('success');
+      const res = await fetch('/api/drive/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: parsed.client_email, privateKey: parsed.private_key }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'บันทึกล้มเหลว');
+      setJsonInput('');
+      setLoadingConfig(true);
+      checkStatus();
     } catch (err: any) {
-      setStatus('error');
-      setErrorMsg(err.message || 'เชื่อมต่อไม่สำเร็จ');
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCopyUrl = () => {
-    navigator.clipboard.writeText(appUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const handleDisconnect = () => {
-    googleDriveService.clearAuth();
-    setIsAuthenticated(false);
-    setStatus('idle');
-  };
-
-  const handleClearConfig = () => {
-    googleDriveService.clearConfig();
-    setClientId('');
-    setIsConfigured(false);
-    setIsAuthenticated(false);
-    setStatus('idle');
+  const handleClear = async () => {
+    await fetch('/api/drive/config', { method: 'DELETE' });
+    setLoadingConfig(true);
+    checkStatus();
   };
 
   if (compact) {
@@ -88,13 +67,8 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
       <div className="flex items-center gap-3">
         <div className={`w-2.5 h-2.5 rounded-full ${isConfigured ? 'bg-emerald-400' : 'bg-gray-300'}`} />
         <span className="text-sm text-gray-600">
-          {isConfigured ? 'Google Drive เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ Drive'}
+          {isConfigured ? 'Google Drive พร้อมใช้งาน' : 'ยังไม่ได้ตั้งค่า Drive'}
         </span>
-        {isConfigured && (
-          <button onClick={handleClearConfig} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
-            ยกเลิกการเชื่อมต่อ
-          </button>
-        )}
       </div>
     );
   }
@@ -110,14 +84,14 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
           </div>
           <div>
             <h3 className="text-gray-800" style={{ fontWeight: 700 }}>Google Drive</h3>
-            <p className="text-gray-500 text-xs">เชื่อมต่อเพื่ออัพโหลดหลักฐานภาพ</p>
+            <p className="text-gray-500 text-xs">อัพโหลดผ่าน Service Account ของทีมงาน</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {isConfigured && (
             <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs px-2.5 py-1 rounded-full" style={{ fontWeight: 600 }}>
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              เชื่อมต่อแล้ว
+              พร้อมใช้งาน
             </span>
           )}
           {onClose && (
@@ -129,103 +103,65 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Connected state */}
-        {isConfigured ? (
+        {loadingConfig ? (
+          <div className="text-sm text-gray-400 py-2">กำลังตรวจสอบ...</div>
+        ) : isConfigured ? (
           <div className="space-y-3">
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-3">
-              <CheckCircle size={18} className="text-emerald-500 shrink-0" />
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <CheckCircle size={18} className="text-emerald-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-emerald-800 text-sm" style={{ fontWeight: 600 }}>เชื่อมต่อสำเร็จ!</p>
-                <p className="text-emerald-600 text-xs">ภาพหลักฐานจะถูกบันทึกในโฟลเดอร์ "Step Tracker Proofs"</p>
+                <p className="text-emerald-800 text-sm" style={{ fontWeight: 600 }}>Service Account พร้อมใช้งาน</p>
+                <p className="text-emerald-600 text-xs mt-0.5">ภาพหลักฐานจะถูกบันทึกในโฟลเดอร์ "nubkao_xspring" บน Google Drive ของทีมงาน โดยไม่ต้อง Approve จาก User</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            {isAdmin && (
               <button
-                onClick={handleDisconnect}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm"
+                onClick={handleClear}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 transition-colors text-sm"
               >
-                <LogOut size={14} />
-                ออกจากระบบ
+                <Trash2 size={14} />
+                ลบ Service Account
               </button>
-              <button
-                onClick={handleClearConfig}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 transition-colors text-sm"
-              >
-                <X size={14} />
-                ล้างการตั้งค่า
-              </button>
-            </div>
+            )}
           </div>
         ) : (
-          <>
-            {/* App URL input */}
-            <div>
-              <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
-                App URL <span className="text-gray-400 font-normal">(Authorized JavaScript origins)</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={appUrl}
-                  onChange={e => setAppUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
+          <div className="space-y-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-amber-800 text-sm" style={{ fontWeight: 600 }}>ยังไม่ได้ตั้งค่า Service Account</p>
+                <p className="text-amber-600 text-xs mt-0.5">
+                  {isAdmin ? 'วาง Service Account JSON ด้านล่างเพื่อเปิดใช้งาน' : 'กรุณาติดต่อ Admin เพื่อตั้งค่า Google Drive'}
+                </p>
+              </div>
+            </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <label className="block text-xs text-gray-600 font-semibold">Service Account JSON</label>
+                <textarea
+                  value={jsonInput}
+                  onChange={e => { setJsonInput(e.target.value); setSaveError(''); }}
+                  placeholder={'วาง JSON ที่ได้จาก Google Cloud Console ที่นี่...\n{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "...",\n  ...\n}'}
+                  rows={6}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
                 />
+                {saveError && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle size={12} /> {saveError}
+                  </p>
+                )}
                 <button
-                  type="button"
-                  onClick={handleCopyUrl}
-                  title="คัดลอก URL"
-                  className="px-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors text-gray-500"
+                  onClick={handleSave}
+                  disabled={saving || !jsonInput.trim()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm disabled:opacity-50 transition-all"
+                  style={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)' }}
                 >
-                  {copied ? <CheckCircle size={15} className="text-emerald-500" /> : <Copy size={15} />}
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  {saving ? 'กำลังบันทึก...' : 'บันทึก Service Account'}
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">เพิ่ม URL นี้ใน Google Cloud Console → Credentials → Authorized JavaScript origins</p>
-            </div>
-
-            {/* Client ID input */}
-            <div>
-              <label className="block text-sm text-gray-600 mb-1.5" style={{ fontWeight: 600 }}>
-                OAuth 2.0 Client ID
-              </label>
-              <input
-                type="text"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                placeholder="xxxxxx.apps.googleusercontent.com"
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 font-mono"
-              />
-            </div>
-
-            {/* Error */}
-            {status === 'error' && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2">
-                <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-red-600 text-sm">{errorMsg}</p>
-              </div>
             )}
-
-            <button
-              onClick={handleSaveAndConnect}
-              disabled={status === 'connecting'}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, #4285F4, #1a73e8)' }}
-            >
-              {status === 'connecting' ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-              )}
-              <span style={{ fontWeight: 600 }}>
-                {status === 'connecting' ? 'กำลังเชื่อมต่อ...' : 'เชื่อมต่อกับ Google'}
-              </span>
-            </button>
-          </>
+          </div>
         )}
 
         {/* Setup guide */}
@@ -234,18 +170,19 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
             onClick={() => setShowGuide(!showGuide)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            <span style={{ fontWeight: 600 }}>📋 วิธีรับ Client ID</span>
+            <span style={{ fontWeight: 600 }}>📋 วิธีตั้งค่า Service Account</span>
             {showGuide ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
           {showGuide && (
             <div className="px-4 pb-4 space-y-2 border-t border-gray-100">
               {[
                 { step: '1', text: 'ไปที่ Google Cloud Console', link: 'https://console.cloud.google.com' },
-                { step: '2', text: 'สร้างโปรเจกต์ใหม่หรือเลือกโปรเจกต์ที่มีอยู่' },
-                { step: '3', text: 'ไปที่ APIs & Services → Enable APIs → เปิดใช้ Google Drive API' },
-                { step: '4', text: 'ไปที่ Credentials → สร้าง OAuth 2.0 Client ID (Web application)' },
-                { step: '5', text: `เพิ่ม URL "${appUrl || window?.location?.origin || ''}" ใน Authorized JavaScript origins` },
-                { step: '6', text: 'คัดลอก Client ID มากรอกในช่องด้านบน' },
+                { step: '2', text: 'สร้างโปรเจกต์ → ไปที่ APIs & Services → Enable Google Drive API' },
+                { step: '3', text: 'ไปที่ IAM & Admin → Service Accounts → สร้าง Service Account ใหม่' },
+                { step: '4', text: 'สร้าง Key (JSON) สำหรับ Service Account แล้วดาวน์โหลด' },
+                { step: '5', text: 'ตั้งค่า GOOGLE_SERVICE_ACCOUNT_EMAIL = client_email จาก JSON' },
+                { step: '6', text: 'ตั้งค่า GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = private_key จาก JSON (ใส่ทั้งหมดรวม \\n)' },
+                { step: '7', text: 'แชร์โฟลเดอร์ Google Drive ที่ต้องการให้ Service Account email มี Editor permission' },
               ].map(item => (
                 <div key={item.step} className="flex gap-3 pt-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center shrink-0" style={{ fontWeight: 700 }}>
@@ -269,3 +206,5 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
     </div>
   );
 }
+
+

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServiceAccountToken } from '@/lib/googleServiceAccount';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { accessToken, fileId } = await req.json();
+    const { fileId } = await req.json();
 
-    if (!accessToken || !fileId) {
-      return NextResponse.json({ error: 'Missing accessToken or fileId' }, { status: 400 });
+    if (!fileId) {
+      return NextResponse.json({ error: 'Missing fileId' }, { status: 400 });
     }
+
+    const accessToken = await getServiceAccountToken();
 
     const res = await fetch(`${DRIVE_REST}/files/${fileId}`, {
       method: 'DELETE',

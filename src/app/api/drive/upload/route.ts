@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServiceAccountToken } from '@/lib/googleServiceAccount';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
@@ -31,11 +32,13 @@ async function ensureFolder(accessToken: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { accessToken, memberName, date, dataUrl } = await req.json();
+    const { memberName, date, dataUrl } = await req.json();
 
-    if (!accessToken || !dataUrl || !memberName || !date) {
+    if (!dataUrl || !memberName || !date) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    const accessToken = await getServiceAccountToken();
 
     const [header, base64Data] = dataUrl.split(',');
     const mimeType = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';

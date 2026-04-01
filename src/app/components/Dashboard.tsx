@@ -214,7 +214,7 @@ export function Dashboard() {
               <div>
                 <h3 className="text-white mb-3" style={{ fontWeight: 600 }}>🔗 Google Drive (สำหรับบันทึกภาพหลักฐาน)</h3>
                 <div className="bg-white rounded-xl overflow-hidden">
-                  <DriveSetupPanel />
+                  <DriveSetupPanel isAdmin={isAdmin} />
                 </div>
               </div>
             </div>
