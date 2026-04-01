@@ -128,8 +128,8 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     const localKey = imageStorage.proofKey(memberId, date);
     await imageStorage.saveImage(localKey, resized);
 
-    // Upload to Google Drive if authenticated
-    if (googleDriveService.isAuthenticated) {
+    // Upload to Google Drive if configured
+    if (googleDriveService.isConfigured) {
       setUploadState('uploading');
       try {
         const member = members.find(m => m.id === memberId);
@@ -176,7 +176,7 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
         proofDriveFileId: result.driveFileId,
         proofDriveUrl: result.driveUrl,
       };
-    } else if (proofDataUrl && googleDriveService.isAuthenticated && !existingEntry?.proofDriveUrl) {
+    } else if (proofDataUrl && googleDriveService.isConfigured && !existingEntry?.proofDriveUrl) {
       // Existing local proof not yet on Drive, Drive is now connected → auto-upload
       const result = await saveProof(selectedMemberId, selectedDate);
       proof = {
@@ -209,7 +209,7 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
       const key = imageStorage.proofKey(selectedMemberId, selectedDate);
       imageStorage.deleteImage(key).catch(() => {});
       // Optionally delete from Drive
-      if (existingEntry.proofDriveFileId && googleDriveService.isAuthenticated) {
+      if (existingEntry.proofDriveFileId && googleDriveService.isConfigured) {
         googleDriveService.deleteFile(existingEntry.proofDriveFileId).catch(() => {});
       }
       deleteEntry(selectedMemberId, selectedDate);
