@@ -3,16 +3,20 @@
 # Run this script on the Plesk server after cloning / pulling the latest code.
 set -euo pipefail
 
-# ── 1. Ensure pnpm is available ───────────────────────────────────────────────
-if ! command -v pnpm &>/dev/null; then
-  echo "[deploy] pnpm not found – installing via corepack…"
-  corepack enable
-  corepack prepare pnpm@latest --activate
+# ── 1. Detect package manager ─────────────────────────────────────────────────
+if command -v pnpm &>/dev/null; then
+  PKG="pnpm"
+  INSTALL_ARGS="install --frozen-lockfile"
+else
+  echo "[deploy] pnpm not found – falling back to npm"
+  PKG="npm"
+  INSTALL_ARGS="install --legacy-peer-deps"
 fi
+echo "[deploy] Using package manager: $PKG"
 
 # ── 2. Install dependencies ───────────────────────────────────────────────────
 echo "[deploy] Installing dependencies…"
-pnpm install --frozen-lockfile
+$PKG $INSTALL_ARGS
 
 # ── 3. Generate Prisma client ─────────────────────────────────────────────────
 echo "[deploy] Generating Prisma client…"
@@ -20,11 +24,23 @@ npx prisma generate
 
 # ── 4. Apply database migrations ─────────────────────────────────────────────
 echo "[deploy] Applying database migrations…"
-npx prisma migrate deploy
+if [ -d "prisma/migrations" ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
+  # If the DB already has tables but no migration history, baseline the first migration
+  MIGRATE_STATUS=$(npx prisma migrate status 2>&1 || true)
+  if echo "$MIGRATE_STATUS" | grep -qi "not empty\|schema is not empty\|baseline"; then
+    FIRST_MIG=$(ls prisma/migrations | sort | head -1)
+    echo "[deploy] Baselining first migration against existing schema: $FIRST_MIG"
+    npx prisma migrate resolve --applied "$FIRST_MIG"
+  fi
+  npx prisma migrate deploy
+else
+  echo "[deploy] No migrations directory found – syncing schema with db push…"
+  npx prisma db push
+fi
 
 # ── 5. Build Next.js (standalone) ────────────────────────────────────────────
 echo "[deploy] Building Next.js…"
-pnpm build
+$PKG run build
 
 # ── 6. Copy static assets into standalone output ─────────────────────────────
 echo "[deploy] Copying static assets into standalone bundle…"
@@ -34,12 +50,25 @@ cp -r .next/static .next/standalone/.next/static
 echo ""
 echo "✓ Build complete."
 echo ""
-echo "Plesk Node.js settings:"
+echo "════════════════════════════════════════════════════════════════"
+echo " Plesk Node.js — การตั้งค่าหลังจาก deploy เสร็จ"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+echo "📁 ขั้นตอนที่ 1 — Build & Copy ไฟล์ (ทำแล้วอัตโนมัติโดย script นี้)"
+echo "  ✓ pnpm build                          → สร้าง standalone output ใน .next/standalone/"
+echo "  ✓ cp -r public .next/standalone/      → copy ไฟล์ static public"
+echo "  ✓ cp -r .next/static .next/standalone/.next/ → copy ไฟล์ static assets"
+echo ""
+echo "⚙️  ขั้นตอนที่ 2 — ตั้งค่า Plesk Node.js Application"
+echo "  เปิด Plesk → Domains → <domain> → Node.js แล้วตั้งค่าดังนี้:"
+echo ""
 echo "  Application root:         $(pwd)"
 echo "  Application startup file: .next/standalone/server.js"
 echo "  Node.js version:          >= 20"
 echo ""
-echo "Set the following environment variables in Plesk → Node.js → Environment Variables:"
+echo "🌐 ขั้นตอนที่ 3 — Environment Variables"
+echo "  เพิ่มตัวแปรเหล่านี้ใน Plesk → Node.js → Environment Variables:"
+echo ""
 echo "  NODE_ENV=production"
 echo "  PORT=3000"
 echo "  DATABASE_HOST=<host>:<port>"
@@ -47,3 +76,8 @@ echo "  DATABASE_USER=<user>"
 echo "  DATABASE_PASSWORD=<password>"
 echo "  DATABASE_NAME=<database>"
 echo "  NEXT_PUBLIC_ADMIN_PIN=<pin>"
+echo ""
+echo "🔄 ขั้นตอนที่ 4 — Restart Application"
+echo "  กด Restart ใน Plesk → Node.js เพื่อโหลด server ใหม่"
+echo ""
+echo "════════════════════════════════════════════════════════════════"

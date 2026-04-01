@@ -166,14 +166,23 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     if (!steps || isNaN(stepsNum) || stepsNum < 0) { setError('กรุณากรอกจำนวนก้าวที่ถูกต้อง'); return; }
     if (stepsNum > 100000) { setError('จำนวนก้าวต้องไม่เกิน 100,000 ก้าวต่อวัน'); return; }
 
-    // Save proof if new image selected
+    // Save proof if new image selected, or if existing local proof not yet on Drive
     let proof: { hasLocalProof?: boolean; proofDriveFileId?: string; proofDriveUrl?: string } = {};
     if (proofFile) {
+      // New image selected → save locally + upload to Drive if connected
       const result = await saveProof(selectedMemberId, selectedDate);
       proof = {
         hasLocalProof: result.hasLocalProof,
         proofDriveFileId: result.driveFileId,
         proofDriveUrl: result.driveUrl,
+      };
+    } else if (proofDataUrl && googleDriveService.isAuthenticated && !existingEntry?.proofDriveUrl) {
+      // Existing local proof not yet on Drive, Drive is now connected → auto-upload
+      const result = await saveProof(selectedMemberId, selectedDate);
+      proof = {
+        hasLocalProof: result.hasLocalProof ?? existingEntry?.hasLocalProof,
+        proofDriveFileId: result.driveFileId ?? existingEntry?.proofDriveFileId,
+        proofDriveUrl: result.driveUrl ?? existingEntry?.proofDriveUrl,
       };
     } else if (existingEntry) {
       // Keep existing proof data
@@ -184,7 +193,12 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
       };
     }
 
-    addOrUpdateEntry(selectedMemberId, selectedDate, stepsNum, proof);
+    try {
+      await addOrUpdateEntry(selectedMemberId, selectedDate, stepsNum, proof);
+    } catch {
+      setError('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่');
+      return;
+    }
     onSuccess?.();
     onClose();
   };

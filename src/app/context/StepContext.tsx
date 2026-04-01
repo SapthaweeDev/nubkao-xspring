@@ -33,7 +33,7 @@ interface StepContextValue {
   entries: StepEntry[];
   startDate: string;
   setStartDate: (date: string) => void;
-  addOrUpdateEntry: (memberId: string, date: string, steps: number, proof?: Partial<Pick<StepEntry, 'proofDriveFileId' | 'proofDriveUrl' | 'hasLocalProof'>>) => void;
+  addOrUpdateEntry: (memberId: string, date: string, steps: number, proof?: Partial<Pick<StepEntry, 'proofDriveFileId' | 'proofDriveUrl' | 'hasLocalProof'>>) => Promise<void>;
   deleteEntry: (memberId: string, date: string) => void;
   updateEntryProof: (memberId: string, date: string, proof: Partial<Pick<StepEntry, 'proofDriveFileId' | 'proofDriveUrl' | 'hasLocalProof'>>) => void;
   getAllDates: () => string[];
@@ -54,7 +54,7 @@ export function StepProvider({ children, initialData }: { children: React.ReactN
 
   const setStartDate = useCallback((date: string) => {
     setStartDateState(date);
-    void fetch('/api/config', {
+    void fetch(('/api/config'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: 'startDate', value: date }),
@@ -82,12 +82,12 @@ export function StepProvider({ children, initialData }: { children: React.ReactN
     return filtered.reduce((sum, e) => sum + e.steps, 0);
   }, [entries]);
 
-  const addOrUpdateEntry = useCallback((
+  const addOrUpdateEntry = useCallback(async (
     memberId: string,
     date: string,
     steps: number,
     proof?: Partial<Pick<StepEntry, 'proofDriveFileId' | 'proofDriveUrl' | 'hasLocalProof'>>
-  ) => {
+  ): Promise<void> => {
     // Optimistic local update
     setEntries(prev => {
       const idx = prev.findIndex(e => e.memberId === memberId && e.date === date);
@@ -99,7 +99,7 @@ export function StepProvider({ children, initialData }: { children: React.ReactN
       return [...prev, { memberId, date, steps, ...(proof || {}) }];
     });
     // Persist to DB
-    void fetch('/api/entries', {
+    await fetch(('/api/entries'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId, date, steps, ...(proof || {}) }),
@@ -118,7 +118,7 @@ export function StepProvider({ children, initialData }: { children: React.ReactN
       updated[idx] = { ...updated[idx], ...proof };
       return updated;
     });
-    void fetch('/api/entries', {
+    void fetch(('/api/entries'), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId, date, ...proof }),
@@ -127,7 +127,7 @@ export function StepProvider({ children, initialData }: { children: React.ReactN
 
   const deleteEntry = useCallback((memberId: string, date: string) => {
     setEntries(prev => prev.filter(e => !(e.memberId === memberId && e.date === date)));
-    void fetch('/api/entries', {
+    void fetch(('/api/entries'), {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memberId, date }),
