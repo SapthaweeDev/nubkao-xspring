@@ -7,6 +7,7 @@ import { ExcelImportModal } from './ExcelImportModal';
 import { DriveSetupPanel } from './DriveSetupPanel';
 import { AddStepModalState } from '../types';
 import { googleDriveService } from '../services/googleDrive';
+import { TeamStepLogo } from './TeamStepLogo';
 
 function formatSteps(n: number) {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}ล.`;
@@ -131,7 +132,9 @@ export function Dashboard() {
           {/* Top bar */}
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl cursor-pointer select-none" onClick={handleLogoClick}>🚶</div>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl cursor-pointer select-none" onClick={handleLogoClick}>
+                <TeamStepLogo size={40} variant="light" />
+              </div>
               <div>
                 <h1 className="text-white" style={{ fontWeight: 700, fontSize: '1.25rem' }}>Nubkao(ช้ากว่าเต่า ก็พวกเรานี่แหละ)</h1>
                 <p className="text-indigo-200 text-xs">{formatDateDisplay(startDate)} — {formatDateDisplay(today)}</p>
