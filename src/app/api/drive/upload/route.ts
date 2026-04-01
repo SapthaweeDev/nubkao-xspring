@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceAccountToken } from '@/lib/googleServiceAccount';
+import { getDriveAccessToken } from '@/lib/googleDriveOAuth';
 import { prisma } from '@/lib/prisma';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
@@ -13,14 +13,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Get shared folder ID from DB
-    const folderConfig = await prisma.config.findUnique({ where: { key: 'sa_folder_id' } });
+    const folderConfig = await prisma.config.findUnique({ where: { key: 'drive_folder_id' } });
     if (!folderConfig?.value) {
       return NextResponse.json({ error: 'ยังไม่ได้ตั้งค่า Folder ID กรุณาตั้งค่าใน Settings' }, { status: 400 });
     }
     const folderId = folderConfig.value;
 
-    const accessToken = await getServiceAccountToken();
+    const accessToken = await getDriveAccessToken();
 
     const [header, base64Data] = dataUrl.split(',');
     const mimeType = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
     form.append('file', new Blob([buffer], { type: mimeType }), filename);
 
     const uploadRes = await fetch(
-      `${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true`,
+      `${DRIVE_UPLOAD}/files?uploadType=multipart&fields=id,webViewLink`,
       { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form }
     );
 
@@ -57,16 +56,13 @@ export async function POST(req: NextRequest) {
     const file = await uploadRes.json();
 
     // Make publicly viewable by anyone with link (non-critical)
-    await fetch(`${DRIVE_REST}/files/${file.id}/permissions?supportsAllDrives=true`, {
+    await fetch(`${DRIVE_REST}/files/${file.id}/permissions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'reader', type: 'anyone' }),
     }).catch(() => {});
 
-    // Ensure webViewLink — fall back to constructing it if Drive omits it
-    const webViewUrl = file.webViewLink ||
-      `https://drive.google.com/file/d/${file.id}/view`;
-
+    const webViewUrl = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
     return NextResponse.json({ fileId: file.id, webViewUrl });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Upload failed';

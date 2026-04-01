@@ -1,33 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const SA_EMAIL_KEY = 'sa_email';
-const SA_KEY_KEY = 'sa_private_key';
-const SA_FOLDER_KEY = 'sa_folder_id';
+const DRIVE_KEYS = ['drive_client_id', 'drive_client_secret', 'drive_folder_id', 'drive_refresh_token'];
 
-// Save service account credentials + folder ID to DB
+// Save drive credentials to DB
 export async function PUT(req: NextRequest) {
   try {
-    const { email, privateKey, folderId } = await req.json();
-    if (!email || !privateKey || !folderId) {
-      return NextResponse.json({ error: 'Missing email, privateKey or folderId' }, { status: 400 });
+    const { clientId, clientSecret, folderId } = await req.json();
+    if (!clientId || !clientSecret || !folderId) {
+      return NextResponse.json({ error: 'Missing clientId, clientSecret or folderId' }, { status: 400 });
     }
 
     await Promise.all([
       prisma.config.upsert({
-        where: { key: SA_EMAIL_KEY },
-        update: { value: email },
-        create: { key: SA_EMAIL_KEY, value: email },
+        where: { key: 'drive_client_id' },
+        update: { value: clientId },
+        create: { key: 'drive_client_id', value: clientId },
       }),
       prisma.config.upsert({
-        where: { key: SA_KEY_KEY },
-        update: { value: privateKey },
-        create: { key: SA_KEY_KEY, value: privateKey },
+        where: { key: 'drive_client_secret' },
+        update: { value: clientSecret },
+        create: { key: 'drive_client_secret', value: clientSecret },
       }),
       prisma.config.upsert({
-        where: { key: SA_FOLDER_KEY },
+        where: { key: 'drive_folder_id' },
         update: { value: folderId },
-        create: { key: SA_FOLDER_KEY, value: folderId },
+        create: { key: 'drive_folder_id', value: folderId },
       }),
     ]);
 
@@ -38,12 +36,10 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// Clear service account credentials from DB
+// Clear all drive config from DB
 export async function DELETE() {
   try {
-    await prisma.config.deleteMany({
-      where: { key: { in: [SA_EMAIL_KEY, SA_KEY_KEY, SA_FOLDER_KEY] } },
-    });
+    await prisma.config.deleteMany({ where: { key: { in: DRIVE_KEYS } } });
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to clear config';

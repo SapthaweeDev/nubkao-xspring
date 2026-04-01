@@ -11,65 +11,65 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
   const [isConfigured, setIsConfigured] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
-  const [jsonInput, setJsonInput] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [folderUrl, setFolderUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [flashMsg, setFlashMsg] = useState('');
 
   const checkStatus = () => {
+    setLoadingConfig(true);
     fetch('/api/drive/status')
       .then(r => r.json())
       .then(d => { setIsConfigured(!!d.configured); setLoadingConfig(false); })
       .catch(() => setLoadingConfig(false));
   };
 
-  useEffect(() => { checkStatus(); }, []);
+  useEffect(() => {
+    checkStatus();
+    // Check URL for OAuth callback result
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('drive_connected') === '1') {
+      setFlashMsg('เชื่อมต่อ Google Drive สำเร็จ!');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (params.get('drive_error')) {
+      setSaveError(decodeURIComponent(params.get('drive_error')!));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
-  const handleSave = async () => {
+  const handleSaveAndConnect = async () => {
     setSaveError('');
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonInput.trim());
-    } catch {
-      setSaveError('JSON ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง');
+    if (!clientId.trim() || !clientSecret.trim() || !folderUrl.trim()) {
+      setSaveError('กรุณากรอกข้อมูลให้ครบทุกช่อง');
       return;
     }
-    if (!parsed.client_email || !parsed.private_key) {
-      setSaveError('ไม่พบ client_email หรือ private_key ใน JSON');
-      return;
-    }
-
-    // Extract folder ID from URL or use raw ID
     const folderMatch = folderUrl.trim().match(/folders\/([a-zA-Z0-9_-]+)/);
     const folderId = folderMatch ? folderMatch[1] : folderUrl.trim();
-    if (!folderId) {
-      setSaveError('กรุณากรอก URL หรือ ID ของโฟลเดอร์ Google Drive');
-      return;
-    }
 
     setSaving(true);
     try {
       const res = await fetch('/api/drive/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: parsed.client_email, privateKey: parsed.private_key, folderId }),
+        body: JSON.stringify({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), folderId }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'บันทึกล้มเหลว');
-      setJsonInput('');
-      setFolderUrl('');
-      setLoadingConfig(true);
-      checkStatus();
+      // Redirect to Google OAuth
+      window.location.href = '/api/drive/auth';
     } catch (err: any) {
       setSaveError(err.message);
-    } finally {
       setSaving(false);
     }
   };
 
-  const handleClear = async () => {
+  const handleDisconnect = async () => {
     await fetch('/api/drive/config', { method: 'DELETE' });
-    setLoadingConfig(true);
-    checkStatus();
+    setIsConfigured(false);
+    setClientId('');
+    setClientSecret('');
+    setFolderUrl('');
   };
 
   if (compact) {
@@ -95,7 +95,7 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
           </div>
           <div>
             <h3 className="text-gray-800" style={{ fontWeight: 700 }}>Google Drive</h3>
-            <p className="text-gray-500 text-xs">อัพโหลดผ่าน Service Account ของทีมงาน</p>
+            <p className="text-gray-500 text-xs">อัพโหลดหลักฐานภาพไปที่ Drive ของทีมงาน</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -114,6 +114,13 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
       </div>
 
       <div className="p-5 space-y-4">
+        {flashMsg && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+            <CheckCircle size={15} className="text-emerald-500" />
+            <p className="text-emerald-700 text-sm">{flashMsg}</p>
+          </div>
+        )}
+
         {loadingConfig ? (
           <div className="text-sm text-gray-400 py-2">กำลังตรวจสอบ...</div>
         ) : isConfigured ? (
@@ -121,111 +128,106 @@ export function DriveSetupPanel({ onClose, compact = false, isAdmin = false }: D
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-start gap-3">
               <CheckCircle size={18} className="text-emerald-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-emerald-800 text-sm" style={{ fontWeight: 600 }}>Service Account พร้อมใช้งาน</p>
-                <p className="text-emerald-600 text-xs mt-0.5">ภาพหลักฐานจะถูกบันทึกในโฟลเดอร์ "nubkao_xspring" บน Google Drive ของทีมงาน โดยไม่ต้อง Approve จาก User</p>
+                <p className="text-emerald-800 text-sm" style={{ fontWeight: 600 }}>เชื่อมต่อสำเร็จ</p>
+                <p className="text-emerald-600 text-xs mt-0.5">ภาพหลักฐานจะถูกบันทึกใน Google Drive ของทีมงาน</p>
               </div>
             </div>
             {isAdmin && (
               <button
-                onClick={handleClear}
+                onClick={handleDisconnect}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 transition-colors text-sm"
               >
                 <Trash2 size={14} />
-                ลบ Service Account
+                ยกเลิกการเชื่อมต่อ
               </button>
             )}
           </div>
         ) : (
-          <div className="space-y-3">
+          isAdmin ? (
+            <div className="space-y-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-amber-800 text-sm">กรอกข้อมูลด้านล่างแล้วกด "เชื่อมต่อด้วย Google" เพื่อ Authorize</p>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-600">OAuth 2.0 Client ID</label>
+                <input type="text" value={clientId} onChange={e => setClientId(e.target.value)}
+                  placeholder="xxxxxxxx.apps.googleusercontent.com"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <label className="block text-xs font-semibold text-gray-600 mt-1">Client Secret</label>
+                <input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)}
+                  placeholder="GOCSPX-xxxxxxxxxxxx"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <label className="block text-xs font-semibold text-gray-600 mt-1">Google Drive Folder URL</label>
+                <input type="text" value={folderUrl} onChange={e => setFolderUrl(e.target.value)}
+                  placeholder="https://drive.google.com/drive/folders/xxxxxxxxxxxxxxxx"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              {saveError && (
+                <div className="flex items-start gap-2 text-red-500 text-xs">
+                  <AlertCircle size={12} className="mt-0.5 shrink-0" /> {saveError}
+                </div>
+              )}
+              <button onClick={handleSaveAndConnect} disabled={saving}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-semibold disabled:opacity-60 transition-all"
+                style={{ background: 'linear-gradient(135deg, #4285F4, #1a73e8)' }}>
+                {saving ? <Loader2 size={15} className="animate-spin" /> : (
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                )}
+                {saving ? 'กำลังบันทึก...' : 'เชื่อมต่อด้วย Google'}
+              </button>
+            </div>
+          ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
               <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-amber-800 text-sm" style={{ fontWeight: 600 }}>ยังไม่ได้ตั้งค่า Service Account</p>
-                <p className="text-amber-600 text-xs mt-0.5">
-                  {isAdmin ? 'วาง Service Account JSON ด้านล่างเพื่อเปิดใช้งาน' : 'กรุณาติดต่อ Admin เพื่อตั้งค่า Google Drive'}
-                </p>
-              </div>
+              <p className="text-amber-800 text-sm">กรุณาติดต่อ Admin เพื่อตั้งค่า Google Drive</p>
             </div>
-            {isAdmin && (
-              <div className="space-y-2">
-                <label className="block text-xs text-gray-600 font-semibold">Service Account JSON</label>
-                <textarea
-                  value={jsonInput}
-                  onChange={e => { setJsonInput(e.target.value); setSaveError(''); }}
-                  placeholder={'วาง JSON ที่ได้จาก Google Cloud Console ที่นี่...\n{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "...",\n  ...\n}'}
-                  rows={6}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-                />
-                <label className="block text-xs text-gray-600 font-semibold mt-2">
-                  Google Drive Folder URL <span className="text-gray-400 font-normal">(ที่ share ให้ Service Account แล้ว)</span>
-                </label>
-                <input
-                  type="text"
-                  value={folderUrl}
-                  onChange={e => { setFolderUrl(e.target.value); setSaveError(''); }}
-                  placeholder="https://drive.google.com/drive/folders/xxxxxxxxxxxxxxxx"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                />
-                {saveError && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle size={12} /> {saveError}
-                  </p>
-                )}
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !jsonInput.trim()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm disabled:opacity-50 transition-all"
-                  style={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)' }}
-                >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                  {saving ? 'กำลังบันทึก...' : 'บันทึก Service Account'}
-                </button>
+          )
+        )}
+
+        {/* Setup guide */}
+        {isAdmin && (
+          <div className="border border-gray-100 rounded-xl overflow-hidden">
+            <button onClick={() => setShowGuide(!showGuide)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+              <span style={{ fontWeight: 600 }}>📋 วิธีรับ Client ID & Secret</span>
+              {showGuide ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            </button>
+            {showGuide && (
+              <div className="px-4 pb-4 space-y-2 border-t border-gray-100">
+                {[
+                  { step: '1', text: 'ไปที่ Google Cloud Console', link: 'https://console.cloud.google.com' },
+                  { step: '2', text: 'APIs & Services → Enable Google Drive API' },
+                  { step: '3', text: 'Credentials → Create → OAuth 2.0 Client ID → Web application' },
+                  { step: '4', text: `เพิ่ม Authorized redirect URI: ${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/api/drive/callback` },
+                  { step: '5', text: 'สร้างโฟลเดอร์ใน Google Drive → คัดลอก URL' },
+                  { step: '6', text: 'กรอก Client ID, Client Secret, Folder URL แล้วกดเชื่อมต่อ' },
+                ].map(item => (
+                  <div key={item.step} className="flex gap-3 pt-2">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center shrink-0" style={{ fontWeight: 700 }}>
+                      {item.step}
+                    </span>
+                    <p className="text-gray-600 text-xs leading-relaxed">
+                      {item.text}
+                      {item.link && (
+                        <a href={item.link} target="_blank" rel="noopener noreferrer"
+                          className="ml-1 text-indigo-500 hover:underline inline-flex items-center gap-0.5">
+                          {item.link} <ExternalLink size={10} />
+                        </a>
+                      )}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
-
-        {/* Setup guide */}
-        <div className="border border-gray-100 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <span style={{ fontWeight: 600 }}>📋 วิธีตั้งค่า Service Account</span>
-            {showGuide ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          </button>
-          {showGuide && (
-            <div className="px-4 pb-4 space-y-2 border-t border-gray-100">
-              {[
-                { step: '1', text: 'ไปที่ Google Cloud Console', link: 'https://console.cloud.google.com' },
-                { step: '2', text: 'สร้างโปรเจกต์ → ไปที่ APIs & Services → Enable Google Drive API' },
-                { step: '3', text: 'ไปที่ IAM & Admin → Service Accounts → สร้าง Service Account ใหม่' },
-                { step: '4', text: 'สร้าง Key (JSON) สำหรับ Service Account แล้วดาวน์โหลด' },
-                { step: '5', text: 'เปิด Google Drive ส่วนตัว → สร้างโฟลเดอร์ใหม่ → คลิกขวา → Share → ใส่ client_email ของ Service Account → Editor' },
-                { step: '6', text: 'คัดลอก URL ของโฟลเดอร์จาก Browser เช่น https://drive.google.com/drive/folders/xxxxxxxx' },
-                { step: '7', text: 'วาง JSON และ Folder URL ในช่องด้านบนแล้วกด บันทึก' },
-              ].map(item => (
-                <div key={item.step} className="flex gap-3 pt-2">
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs flex items-center justify-center shrink-0" style={{ fontWeight: 700 }}>
-                    {item.step}
-                  </span>
-                  <p className="text-gray-600 text-xs leading-relaxed">
-                    {item.text}
-                    {item.link && (
-                      <a href={item.link} target="_blank" rel="noopener noreferrer"
-                        className="ml-1 text-indigo-500 hover:underline inline-flex items-center gap-0.5">
-                        {item.link} <ExternalLink size={10} />
-                      </a>
-                    )}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
 }
-
-

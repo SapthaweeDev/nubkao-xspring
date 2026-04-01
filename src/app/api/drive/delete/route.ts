@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServiceAccountToken } from '@/lib/googleServiceAccount';
+import { getDriveAccessToken } from '@/lib/googleDriveOAuth';
 
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 
@@ -11,14 +11,13 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing fileId' }, { status: 400 });
     }
 
-    const accessToken = await getServiceAccountToken();
+    const accessToken = await getDriveAccessToken();
 
-    const res = await fetch(`${DRIVE_REST}/files/${fileId}?supportsAllDrives=true`, {
+    const res = await fetch(`${DRIVE_REST}/files/${fileId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    // 204 = deleted, 404 = already gone — both are acceptable
     if (!res.ok && res.status !== 204 && res.status !== 404) {
       return NextResponse.json({ error: 'Drive delete failed' }, { status: res.status });
     }
