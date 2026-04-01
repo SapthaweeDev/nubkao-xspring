@@ -3,6 +3,24 @@
 # Run this script on the Plesk server after cloning / pulling the latest code.
 set -euo pipefail
 
+# ── 0. Load .env file if present ─────────────────────────────────────────────
+if [ -f ".env" ]; then
+  echo "[deploy] Loading environment from .env…"
+  set -o allexport
+  # shellcheck disable=SC1091
+  source .env
+  set +o allexport
+fi
+
+# Check if DB vars are available (Plesk injects them into Node.js app, not shell)
+_DB_AVAILABLE=true
+for _VAR in DATABASE_HOST DATABASE_USER DATABASE_PASSWORD DATABASE_NAME; do
+  if [ -z "${!_VAR:-}" ]; then
+    _DB_AVAILABLE=false
+    break
+  fi
+done
+
 # ── 1. Detect package manager ─────────────────────────────────────────────────
 if command -v pnpm &>/dev/null; then
   PKG="pnpm"
@@ -23,19 +41,24 @@ echo "[deploy] Generating Prisma client…"
 npx prisma generate
 
 # ── 4. Apply database migrations ─────────────────────────────────────────────
-echo "[deploy] Applying database migrations…"
-if [ -d "prisma/migrations" ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-  # If the DB already has tables but no migration history, baseline the first migration
-  MIGRATE_STATUS=$(npx prisma migrate status 2>&1 || true)
-  if echo "$MIGRATE_STATUS" | grep -qi "not empty\|schema is not empty\|baseline"; then
-    FIRST_MIG=$(ls prisma/migrations | sort | head -1)
-    echo "[deploy] Baselining first migration against existing schema: $FIRST_MIG"
-    npx prisma migrate resolve --applied "$FIRST_MIG"
+if [ "$_DB_AVAILABLE" = "true" ]; then
+  echo "[deploy] Applying database migrations…"
+  if [ -d "prisma/migrations" ] && [ -n "$(ls -A prisma/migrations 2>/dev/null)" ]; then
+    MIGRATE_STATUS=$(npx prisma migrate status 2>&1 || true)
+    if echo "$MIGRATE_STATUS" | grep -qi "not empty\|schema is not empty\|baseline"; then
+      FIRST_MIG=$(ls prisma/migrations | sort | head -1)
+      echo "[deploy] Baselining first migration against existing schema: $FIRST_MIG"
+      npx prisma migrate resolve --applied "$FIRST_MIG"
+    fi
+    npx prisma migrate deploy
+  else
+    echo "[deploy] No migrations directory found – syncing schema with db push…"
+    npx prisma db push
   fi
-  npx prisma migrate deploy
 else
-  echo "[deploy] No migrations directory found – syncing schema with db push…"
-  npx prisma db push
+  echo "[deploy] WARNING: DATABASE_* vars not set in shell – skipping DB migration."
+  echo "[deploy]          DB migration will use vars from Plesk when the app starts."
+  echo "[deploy]          Run 'npx prisma db push' manually via SSH if needed."
 fi
 
 # ── 5. Build Next.js (standalone) ────────────────────────────────────────────
