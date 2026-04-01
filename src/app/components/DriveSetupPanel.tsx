@@ -10,6 +10,7 @@ interface DriveSetupPanelProps {
 export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelProps) {
   const [clientId, setClientId] = useState(googleDriveService.clientId);
   const [appUrl, setAppUrl] = useState(googleDriveService.appUrl);
+  const [isConfigured, setIsConfigured] = useState(googleDriveService.isConfigured);
   const [isAuthenticated, setIsAuthenticated] = useState(googleDriveService.isAuthenticated);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -25,6 +26,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
       if (!googleDriveService.appUrl && savedUrl) {
         googleDriveService.setAppUrl(savedUrl);
       }
+      setIsConfigured(googleDriveService.isConfigured);
       setIsAuthenticated(googleDriveService.isAuthenticated);
       setLoadingConfig(false);
     });
@@ -33,6 +35,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
   useEffect(() => {
     if (loadingConfig) return;
     const tick = setInterval(() => {
+      setIsConfigured(googleDriveService.isConfigured);
       setIsAuthenticated(googleDriveService.isAuthenticated);
     }, 2000);
     return () => clearInterval(tick);
@@ -49,6 +52,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
       googleDriveService.setClientId(clientId.trim());
       googleDriveService.setAppUrl(appUrl.trim());
       await googleDriveService.authenticate();
+      setIsConfigured(true);
       setIsAuthenticated(true);
       setStatus('success');
     } catch (err: any) {
@@ -73,6 +77,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
   const handleClearConfig = () => {
     googleDriveService.clearConfig();
     setClientId('');
+    setIsConfigured(false);
     setIsAuthenticated(false);
     setStatus('idle');
   };
@@ -81,13 +86,13 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
     if (loadingConfig) return <div className="text-xs text-gray-400">กำลังโหลด...</div>;
     return (
       <div className="flex items-center gap-3">
-        <div className={`w-2.5 h-2.5 rounded-full ${isAuthenticated ? 'bg-emerald-400' : 'bg-gray-300'}`} />
+        <div className={`w-2.5 h-2.5 rounded-full ${isConfigured ? 'bg-emerald-400' : 'bg-gray-300'}`} />
         <span className="text-sm text-gray-600">
-          {isAuthenticated ? 'Google Drive เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ Drive'}
+          {isConfigured ? 'Google Drive เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ Drive'}
         </span>
-        {isAuthenticated && (
-          <button onClick={handleDisconnect} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
-            ออกจากระบบ
+        {isConfigured && (
+          <button onClick={handleClearConfig} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+            ยกเลิกการเชื่อมต่อ
           </button>
         )}
       </div>
@@ -109,7 +114,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isAuthenticated && (
+          {isConfigured && (
             <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs px-2.5 py-1 rounded-full" style={{ fontWeight: 600 }}>
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               เชื่อมต่อแล้ว
@@ -125,7 +130,7 @@ export function DriveSetupPanel({ onClose, compact = false }: DriveSetupPanelPro
 
       <div className="p-5 space-y-4">
         {/* Connected state */}
-        {isAuthenticated ? (
+        {isConfigured ? (
           <div className="space-y-3">
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <CheckCircle size={18} className="text-emerald-500 shrink-0" />

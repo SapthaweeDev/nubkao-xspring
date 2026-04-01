@@ -27,7 +27,7 @@ export function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [tempStartDate, setTempStartDate] = useState(startDate);
   const [sortBy, setSortBy] = useState<'steps' | 'missing' | 'name'>('steps');
-  const [driveConnected, setDriveConnected] = useState(googleDriveService.isAuthenticated);
+  const [driveConnected, setDriveConnected] = useState(googleDriveService.isConfigured);
 
   const [isAdmin, setIsAdmin] = useState(false);
   React.useEffect(() => {
@@ -68,7 +68,7 @@ export function Dashboard() {
 
   // Refresh Drive status
   React.useEffect(() => {
-    const tick = setInterval(() => setDriveConnected(googleDriveService.isAuthenticated), 2000);
+    const tick = setInterval(() => setDriveConnected(googleDriveService.isConfigured), 2000);
     return () => clearInterval(tick);
   }, []);
 

@@ -218,7 +218,7 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     }
   };
 
-  const driveConnected = googleDriveService.isAuthenticated;
+  const driveConnected = googleDriveService.isConfigured;
   const accentColor = selectedMember?.color || '#6366F1';
 
   return (
