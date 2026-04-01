@@ -29,6 +29,7 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
   const [uploadError, setUploadError] = useState('');
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isFetchingFromDrive, setIsFetchingFromDrive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const today = getTodayString();
@@ -44,39 +45,14 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
     setUploadState('idle');
     setUploadError('');
     setDriveUrl(null);
+    setIsFetchingFromDrive(false);
 
     if (existingEntry) {
       if (existingEntry.proofDriveUrl) setDriveUrl(existingEntry.proofDriveUrl);
-      if (existingEntry.hasLocalProof) {
-        const key = imageStorage.proofKey(
-          selectedMemberId || initMemberId || '',
-          selectedDate || initDate || ''
-        );
-        imageStorage.getImage(key).then((url: string | null) => {
-          if (url) {
-            setProofDataUrl(url);
-          } else if (existingEntry.proofDriveFileId) {
-            // Local cache missing — fetch from Drive
-            setUploadState('uploading');
-            fetch(`/api/drive/image?fileId=${existingEntry.proofDriveFileId}`)
-              .then(r => r.ok ? r.blob() : Promise.reject())
-              .then(blob => new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = e => resolve(e.target?.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-              }))
-              .then(dataUrl => {
-                setProofDataUrl(dataUrl);
-                setUploadState('success');
-              })
-              .catch(() => setUploadState('idle'));
-          }
-        });
-      } else if (existingEntry.proofDriveFileId) {
-        // No local proof at all — fetch from Drive
-        setUploadState('uploading');
-        fetch(`/api/drive/image?fileId=${existingEntry.proofDriveFileId}`)
+
+      const fetchFromDrive = (fileId: string) => {
+        setIsFetchingFromDrive(true);
+        fetch(`/api/drive/image?fileId=${fileId}`)
           .then(r => r.ok ? r.blob() : Promise.reject())
           .then(blob => new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -88,7 +64,24 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
             setProofDataUrl(dataUrl);
             setUploadState('success');
           })
-          .catch(() => setUploadState('idle'));
+          .catch(() => {})
+          .finally(() => setIsFetchingFromDrive(false));
+      };
+
+      if (existingEntry.hasLocalProof) {
+        const key = imageStorage.proofKey(
+          selectedMemberId || initMemberId || '',
+          selectedDate || initDate || ''
+        );
+        imageStorage.getImage(key).then((url: string | null) => {
+          if (url) {
+            setProofDataUrl(url);
+          } else if (existingEntry.proofDriveFileId) {
+            fetchFromDrive(existingEntry.proofDriveFileId);
+          }
+        });
+      } else if (existingEntry.proofDriveFileId) {
+        fetchFromDrive(existingEntry.proofDriveFileId);
       }
     }
   }, [existingEntry, isOpen]);
@@ -380,7 +373,13 @@ export function AddStepsModal({ isOpen, memberId: initMemberId, date: initDate, 
               </div>
             </div>
 
-            {proofDataUrl ? (
+            {isFetchingFromDrive ? (
+              /* Loading from Drive */
+              <div className="rounded-xl border border-gray-200 bg-gray-50 h-48 flex flex-col items-center justify-center gap-2 text-gray-400">
+                <Loader2 size={22} className="animate-spin" style={{ color: accentColor }} />
+                <span className="text-xs">กำลังโหลดรูปจาก Drive...</span>
+              </div>
+            ) : proofDataUrl ? (
               /* Preview */
               <div className="relative rounded-xl overflow-hidden border border-gray-200">
                 <img
