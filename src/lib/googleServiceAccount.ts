@@ -13,7 +13,7 @@ function base64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-function makeJwt(email: string, privateKey: string): string {
+function makeJwt(email: string, rawPrivateKey: string): string {
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
   const payload = base64url(Buffer.from(JSON.stringify({
@@ -24,13 +24,11 @@ function makeJwt(email: string, privateKey: string): string {
     iat: now,
   })));
   const signingInput = `${header}.${payload}`;
-  const sig = base64url(
-    crypto.sign('sha256', Buffer.from(signingInput), {
-      key: privateKey,
-      format: 'pem',
-      type: 'pkcs8',
-    })
-  );
+
+  // Normalize: replace literal \n with real newlines, then trim
+  const pem = rawPrivateKey.replace(/\\n/g, '\n').trim();
+  const keyObject = crypto.createPrivateKey(pem);
+  const sig = base64url(crypto.sign('sha256', Buffer.from(signingInput), keyObject));
   return `${signingInput}.${sig}`;
 }
 
