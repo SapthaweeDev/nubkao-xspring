@@ -5,6 +5,40 @@ import { prisma } from '@/lib/prisma';
 const DRIVE_REST = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 
+/** Find or create a subfolder by name inside a parent folder. Returns the folder ID. */
+async function getOrCreateDateFolder(
+  accessToken: string,
+  parentId: string,
+  folderName: string
+): Promise<string> {
+  // Search for existing folder
+  const q = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentId}' in parents and trashed=false`;
+  const searchRes = await fetch(
+    `${DRIVE_REST}/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (searchRes.ok) {
+    const data = await searchRes.json();
+    if (data.files?.length > 0) return data.files[0].id as string;
+  }
+
+  // Create new folder
+  const createRes = await fetch(`${DRIVE_REST}/files?fields=id`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId],
+    }),
+  });
+  if (!createRes.ok) {
+    throw new Error('ไม่สามารถสร้าง folder วันที่ได้');
+  }
+  const folder = await createRes.json();
+  return folder.id as string;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { memberName, date, dataUrl } = await req.json();
@@ -17,9 +51,12 @@ export async function POST(req: NextRequest) {
     if (!folderConfig?.value) {
       return NextResponse.json({ error: 'ยังไม่ได้ตั้งค่า Folder ID กรุณาตั้งค่าใน Settings' }, { status: 400 });
     }
-    const folderId = folderConfig.value;
+    const rootFolderId = folderConfig.value;
 
     const accessToken = await getDriveAccessToken();
+
+    // Get or create date subfolder (e.g. "2026-04-02")
+    const folderId = await getOrCreateDateFolder(accessToken, rootFolderId, date);
 
     const [header, base64Data] = dataUrl.split(',');
     const mimeType = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
