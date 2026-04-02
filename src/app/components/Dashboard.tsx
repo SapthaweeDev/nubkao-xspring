@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { TrendingUp, Plus, AlertTriangle, CheckCircle, ChevronRight, Settings, FileSpreadsheet, HardDrive, Image } from 'lucide-react';
+import { TrendingUp, Plus, AlertTriangle, CheckCircle, ChevronRight, Settings, FileSpreadsheet, HardDrive, Image, Camera, Activity, Calendar } from 'lucide-react';
 import { useStepContext, getTodayString } from '../context/StepContext';
 import { AddStepsModal } from './AddStepsModal';
 import { ExcelImportModal } from './ExcelImportModal';
@@ -8,6 +8,67 @@ import { DriveSetupPanel } from './DriveSetupPanel';
 import { AddStepModalState } from '../types';
 import { googleDriveService } from '../services/googleDrive';
 import { TeamStepLogo } from './TeamStepLogo';
+
+const encouragementPool = [
+  { emoji: '💪', text: 'คุณทำได้! ทีมกำลังรอคุณอยู่นะ' },
+  { emoji: '🌟', text: 'ก้าวเล็กๆ วันนี้ คือชัยชนะของพรุ่งนี้' },
+  { emoji: '🚶', text: 'เริ่มต้นใหม่ได้เลย ออกเดินกันเถอะ!' },
+  { emoji: '❤️', text: 'ทีมส่งกำลังใจมาให้เต็มๆ เลย ไปได้เลย!' },
+  { emoji: '✨', text: 'ทุกก้าวมีความหมาย อย่าหยุดนะ เชียร์คุณอยู่' },
+  { emoji: '🎯', text: 'ยังไม่สายเกินไปหรอก เดินวันนี้เลย!' },
+  { emoji: '🔥', text: 'ไฟยังลุกอยู่! ลุกขึ้นมาเดินด้วยกันนะ' },
+  { emoji: '🏃', text: 'วันนี้เป็นวันของคุณ ลองเพิ่มก้าวดูนะ!' },
+  { emoji: '⭐', text: 'ดาวของทีมรอคุณอยู่ สู้ๆ นะ!' },
+  { emoji: '🤝', text: 'เราอยู่ด้วยกัน สู้ไปด้วยกัน ก้าวต่อไป!' },
+  { emoji: '🌈', text: 'วันนี้อาจเหนื่อย แต่คุณเก่งมากแล้วนะ 🌈' },
+  { emoji: '🐣', text: 'ค่อยๆ ไปก็ได้ แค่ไม่หยุดก็พอแล้วน้า 🐣' },
+  { emoji: '🍀', text: 'ขอให้ก้าววันนี้เป็นก้าวแห่งโชคดี 🍀' },
+  { emoji: '🧸', text: 'พักได้ แต่ห้ามถอยนะ เดี๋ยวเรารออยู่ 🧸' },
+  { emoji: '🌻', text: 'ยิ้มหน่อยนะ แล้วก้าวต่อไปกัน 🌻' },
+  { emoji: '🍑', text: 'ขยับอีกนิดเดียว ก็เก่งมากแล้วน้า 🍑' },
+  { emoji: '🫶', text: 'ส่งกำลังใจเล็กๆ ไปให้คุณทุกก้าวเลย 🫶' },
+  { emoji: '🐢', text: 'ช้าได้ แต่ไม่หยุดนะ เต่าแบบเราก็ถึงเส้นชัย 🐢' },
+  { emoji: '🎈', text: 'ก้าววันนี้ เดี๋ยวมีรางวัลเล็กๆ รออยู่ 🎈' },
+  { emoji: '🌙', text: 'ก่อนจบวัน ลองเพิ่มอีกนิดนึงนะ 🌙' },
+  { emoji: '🥰', text: 'แค่ออกเดินก็ชนะตัวเองแล้ว เก่งมากเลย 🥰' },
+  { emoji: '🍎', text: 'ดูแลตัวเองดีๆ นะ เริ่มจากก้าวเล็กๆ นี้เลย 🍎' },
+  { emoji: '🎶', text: 'เปิดเพลงโปรด แล้วเดินเพลินๆ กัน 🎶' },
+  { emoji: '🧡', text: 'ทีมอยู่ข้างคุณเสมอ ก้าวไปด้วยกันนะ 🧡' },
+  { emoji: '🚀', text: 'อีกนิดเดียวก็ทะยานแล้ว ไปต่อเลย 🚀' },
+  { emoji: '🍗', text: 'เดินอีกนิด เดี๋ยวได้กินเพิ่มนะ 😏' },
+  { emoji: '🐷', text: 'ขยับหน่อย เดี๋ยวหมูขึ้นไม่รู้ตัวนะ 😂' },
+  { emoji: '🛌', text: 'เตียงเรียกก็จริง… แต่รองเท้าวิ่งเรียกดังกว่า! 😆' },
+  { emoji: '🍔', text: 'กินมาแล้วก็ต้องเดินคืนหน่อยปะ 😜' },
+  { emoji: '😴', text: 'ง่วงก็เดินไปง่วงไป เดี๋ยวก็ถึงเองแหละ 🤣' },
+  { emoji: '🧋', text: 'เดินครบเป้า = อนุญาตชานม 1 แก้ว 😎' },
+  { emoji: '📱', text: 'เลื่อนมือถือพักก่อน เลื่อนขาแทนบ้าง 😏' },
+  { emoji: '🐢', text: 'ช้าก็ยังดีกว่านอนนะเต่า 🐢😂' },
+  { emoji: '🔥', text: 'ไม่ได้วิ่งก็ไม่เป็นไร แค่ไม่หยุดก็พอแล้วนะ 😎' },
+  { emoji: '🍕', text: 'พิซซ่าที่กินไป… มันกำลังถามหาคุณอยู่ 🍕🤣' },
+  { emoji: '🧠', text: 'สมองบอกพัก แต่ร่างกายบอก “ไปต่อ!” 😆' },
+  { emoji: '👟', text: 'รองเท้าพร้อมแล้ว เหลือแต่ใจคุณอะ พร้อมยัง 😏' },
+  { emoji: '💸', text: 'เดินวันนี้ ประหยัดค่าหมอในอนาคตนะ 💸😂' },
+  { emoji: '😏', text: 'ขยับหน่อย เดี๋ยวคนอื่นแซงนะจ๊ะ 😏' },
+  { emoji: '🏃', text: 'ไม่ได้หนีใคร แค่หนีความขี้เกียจ 🤣' },
+  { emoji: '🍰', text: 'ของหวานไม่ผิด… แต่คุณต้องเดินนะ 😜' },
+  { emoji: '🪫', text: 'แบตจะหมดก็ชาร์จได้ แต่พุงต้องใช้เดินนะ 😆' },
+  { emoji: '📊', text: 'สถิติไม่โกหกนะ… วันนี้คุณยังเดินน้อยอยู่ 😏' },
+  { emoji: '🚨', text: 'แจ้งเตือน: ความขี้เกียจกำลังชนะ! รีบลุกด่วน 🚨🤣' },
+];
+
+function getEncouragement(memberId: string, index: number) {
+  let hash = 0;
+  const str = memberId + index;
+
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+
+  const idx = Math.abs(hash) % encouragementPool.length;
+
+  return encouragementPool[idx];
+}
 
 function formatSteps(n: number) {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}ล.`;
@@ -104,7 +165,9 @@ export function Dashboard() {
     ? Math.round((memberStats.reduce((s, m) => s + m.submitted, 0) / (members.length * totalDays)) * 100)
     : 0;
   const totalProofs = entries.filter(e => e.hasLocalProof || e.proofDriveUrl).length;
+  const teamAvg = members.length > 0 ? Math.round(teamTotal / members.length) : 0;
 
+  const bottom5 = [...memberStats].sort((a, b) => a.totalSteps - b.totalSteps).slice(0, 5);
   const handleSaveSettings = () => {
     setStartDate(tempStartDate);
     setShowSettings(false);
@@ -112,6 +175,15 @@ export function Dashboard() {
 
   const formatDateDisplay = (d: string) =>
     new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  function getRankEmojiForEncouragement(index: number) {
+    if (index === 0) return '🥺';
+    if (index === 1) return '😤';
+    if (index === 2) return '🥲';
+    if (index === 3) return '😏';
+    if (index === 4) return '😴';
+    return '😎';
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -229,17 +301,64 @@ export function Dashboard() {
             <p className="text-indigo-300 text-sm mt-1">ก้าว</p>
           </div>
 
+
           {/* Quick stats */}
-          <div className="grid grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-6">
             {[
-              { label: 'วันที่ติดตาม', value: totalDays, color: 'text-white' },
-              { label: 'ส่งข้อมูลครบ', value: `${overallCompletion}%`, color: 'text-emerald-300' },
-              { label: 'วันที่ขาดหาย', value: totalMissingAll, color: 'text-amber-300' },
-              { label: 'ภาพหลักฐาน', value: totalProofs, color: 'text-sky-300' },
+              {
+                label: 'วันที่ติดตาม',
+                value: totalDays,
+                unit: 'วัน',
+                color: 'text-white',
+                icon: <Calendar size={14} className="text-white/60" />,
+                accent: 'from-white/5 to-white/10',
+              },
+              {
+                label: 'ส่งข้อมูลครบ',
+                value: `${overallCompletion}%`,
+                unit: 'อัตราการส่ง',
+                color: 'text-emerald-300',
+                icon: <CheckCircle size={14} className="text-emerald-400/60" />,
+                accent: 'from-emerald-500/5 to-emerald-500/10',
+              },
+              {
+                label: 'ค่าเฉลี่ย/คน',
+                value: formatSteps(teamAvg),
+                unit: 'ก้าว/คน',
+                color: 'text-violet-300',
+                icon: <Activity size={14} className="text-violet-400/60" />,
+                accent: 'from-violet-500/5 to-violet-500/10',
+              },
+              {
+                label: 'วันที่ขาดหาย',
+                value: totalMissingAll,
+                unit: 'รวมทีม',
+                color: 'text-amber-300',
+                icon: <AlertTriangle size={14} className="text-amber-400/60" />,
+                accent: 'from-amber-500/5 to-amber-500/10',
+              },
+              {
+                label: 'ภาพหลักฐาน',
+                value: totalProofs,
+                unit: 'รูป',
+                color: 'text-sky-300',
+                icon: <Camera size={14} className="text-sky-400/60" />,
+                accent: 'from-sky-500/5 to-sky-500/10',
+                last: true,
+              },
             ].map((s, i) => (
-              <div key={i} className="bg-white/10 rounded-2xl p-4 text-center border border-white/10">
-                <div className={s.color} style={{ fontSize: '1.75rem', fontWeight: 700 }}>{s.value}</div>
-                <p className="text-indigo-200 text-xs mt-1">{s.label}</p>
+              <div
+                key={i}
+                className={`bg-gradient-to-br ${s.accent} border border-white/10 rounded-2xl p-4 flex flex-col gap-1 ${(s as any).last ? 'col-span-2 lg:col-span-1' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-indigo-300 text-xs">{s.label}</span>
+                  {s.icon}
+                </div>
+                <div className={`${s.color} tabular-nums`} style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1 }}>
+                  {s.value}
+                </div>
+                <p className="text-white/30 text-xs">{s.unit}</p>
               </div>
             ))}
           </div>
@@ -403,7 +522,85 @@ export function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Encouragement section — bottom 5 */}
+        <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <span className="w-7 h-7 bg-pink-100 rounded-lg flex items-center justify-center text-sm">💌</span>
+            <h2 className="text-gray-800" style={{ fontWeight: 700 }}>ให้กำลังใจทีม</h2>
+            <span className="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full">5 คนที่ก้าวน้อยสุด</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {bottom5.map((stat, index) => {
+              const enc = getEncouragement(stat.member.id, index);
+              const gapToAvg = teamAvg - stat.totalSteps;
+              return (
+                <div
+                  key={stat.member.id}
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors cursor-pointer group"
+                  onClick={() => router.push(`/member/${stat.member.id}`)}
+                >
+                  {/* Rank badge */}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-base shrink-0 select-none">
+                    {getRankEmojiForEncouragement(index)}
+                  </div>
+
+                  {/* Avatar */}
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm shrink-0"
+                    style={{ background: stat.member.color, fontWeight: 700 }}
+                  >
+                    {getInitials(stat.member.name)}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-gray-800" style={{ fontWeight: 600 }}>{stat.member.name}</span>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: `${stat.member.color}18`, color: stat.member.color, fontWeight: 600 }}
+                      >
+                        {formatSteps(stat.totalSteps)} ก้าว
+                      </span>
+                    </div>
+                    <p className="text-gray-500 text-xs mt-1">
+                      <span className="mr-1">{enc.emoji}</span>{enc.text}
+                      {gapToAvg > 0 && (
+                        <span className="ml-2 text-gray-400">· ห่างค่าเฉลี่ยอีก <span className="text-indigo-500" style={{ fontWeight: 600 }}>{formatSteps(gapToAvg)}</span> ก้าว</span>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="hidden sm:block w-24">
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${teamAvg > 0 ? Math.min(100, Math.round((stat.totalSteps / teamAvg) * 100)) : 0}%`,
+                          background: stat.member.color,
+                        }}
+                      />
+                    </div>
+                    <p className="text-gray-400 text-xs text-center mt-1">
+                      {teamAvg > 0 ? Math.min(100, Math.round((stat.totalSteps / teamAvg) * 100)) : 0}% ของเฉลี่ย
+                    </p>
+                  </div>
+
+                  <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-400 transition-colors shrink-0" />
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-5 py-3 bg-gradient-to-r from-pink-50 to-violet-50 border-t border-gray-100">
+            <p className="text-center text-gray-500 text-xs">
+              🤗 ทีมเป็นกำลังใจให้กัน — กดที่ชื่อเพื่อเพิ่มข้อมูลย้อนหลัง
+            </p>
+          </div>
+        </div>
       </div>
+
 
       {/* FAB */}
       <button
