@@ -71,7 +71,7 @@ function getEncouragement(memberId: string, index: number) {
 }
 
 function formatSteps(n: number) {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}ล.`;
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return n.toLocaleString('th-TH');
 }
